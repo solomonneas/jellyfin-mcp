@@ -7,7 +7,7 @@
 
 An MCP (Model Context Protocol) server for [Jellyfin](https://jellyfin.org). Exposes Jellyfin's management and playback control surface to LLMs — list who's watching what, pause a session, scan a library, run a scheduled task, or message a client, all as typed tool calls.
 
-Companion to [media-cli](https://github.com/solomonneas/media-cli) (the *arr stack CLI). media-cli handles acquiring content; jellyfin-mcp handles serving, monitoring, and controlling playback.
+Companion to [arr-cli](https://github.com/solomonneas/arr-cli) (the *arr stack CLI). arr-cli handles acquiring content; jellyfin-mcp handles serving, monitoring, and controlling playback.
 
 ## Features
 
