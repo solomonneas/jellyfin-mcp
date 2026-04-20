@@ -155,16 +155,6 @@ npm run build     # tsup bundle
 npm test          # vitest
 ```
 
-## Contributing
-
-PRs welcome. Some ideas:
-
-- [ ] Playback Reporting plugin support (viewing stats, popular content)
-- [ ] Collections CRUD
-- [ ] Playlist management
-- [ ] Transcoding session deep inspection
-- [ ] Plugin install / enable / disable
-
 ## License
 
 [MIT](LICENSE)
