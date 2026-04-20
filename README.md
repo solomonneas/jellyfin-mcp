@@ -26,7 +26,7 @@ Companion to [arr-cli](https://github.com/solomonneas/arr-cli) (the *arr stack C
 - User admin: list, create, delete, enable/disable, reset password
 - Activity log queries for recent events
 - Destructive ops (`restart`, `shutdown`, `delete_user`, `set_user_password`) require explicit `confirm: true`
-- Works with Claude Desktop, Claude Code, OpenClaw, and any MCP-compatible client
+- Works with Claude Desktop, Claude Code, OpenClaw, Hermes Agent, and any MCP-compatible client
 
 ## Tools
 
@@ -178,6 +178,37 @@ Then restart the OpenClaw gateway so the new server is picked up:
 ```bash
 systemctl --user restart openclaw-gateway
 openclaw mcp list   # confirm "jellyfin" is registered
+```
+
+### Hermes Agent
+
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) reads MCP config from `~/.hermes/config.yaml` under the `mcp_servers` key. Add an entry:
+
+```yaml
+mcp_servers:
+  jellyfin:
+    command: "jellyfin-mcp"
+    env:
+      JELLYFIN_URL: "http://localhost:8096"
+      JELLYFIN_API_KEY: "your-api-key-here"
+```
+
+Or, when running from a source checkout instead of the global npm install:
+
+```yaml
+mcp_servers:
+  jellyfin:
+    command: "node"
+    args: ["/absolute/path/to/jellyfin-mcp/dist/index.js"]
+    env:
+      JELLYFIN_URL: "http://localhost:8096"
+      JELLYFIN_API_KEY: "your-api-key-here"
+```
+
+Then reload MCP from inside a Hermes session:
+
+```
+/reload-mcp
 ```
 
 ### Remote Jellyfin via SSH tunnel
