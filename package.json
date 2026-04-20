@@ -1,0 +1,58 @@
+{
+  "name": "jellyfin-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Jellyfin media server — control sessions, scan libraries, manage users, query content, and run scheduled tasks via LLM tool calls",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "jellyfin-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm test && npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "author": "Solomon Neas <me@solomonneas.dev>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/solomonneas/jellyfin-mcp.git"
+  },
+  "homepage": "https://github.com/solomonneas/jellyfin-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/solomonneas/jellyfin-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "jellyfin",
+    "media-server",
+    "model-context-protocol",
+    "llm-tools",
+    "claude",
+    "home-media"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
+}
