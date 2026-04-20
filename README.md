@@ -26,7 +26,7 @@ Companion to [arr-cli](https://github.com/solomonneas/arr-cli) (the *arr stack C
 - User admin: list, create, delete, enable/disable, reset password
 - Activity log queries for recent events
 - Destructive ops (`restart`, `shutdown`, `delete_user`, `set_user_password`) require explicit `confirm: true`
-- Works with Claude Desktop, Claude Code, any MCP-compatible client
+- Works with Claude Desktop, Claude Code, OpenClaw, and any MCP-compatible client
 
 ## Tools
 
@@ -142,6 +142,42 @@ claude mcp add jellyfin \
   --env JELLYFIN_URL=http://localhost:8096 \
   --env JELLYFIN_API_KEY=your-api-key-here \
   -- jellyfin-mcp
+```
+
+Add `--scope user` to make it available from any directory instead of only the current project.
+
+### OpenClaw
+
+If you're running from a source checkout instead of the npm-installed binary, point `command`/`args` at the built `dist/index.js`:
+
+```bash
+openclaw mcp set jellyfin '{
+  "command": "node",
+  "args": ["/absolute/path/to/jellyfin-mcp/dist/index.js"],
+  "env": {
+    "JELLYFIN_URL": "http://localhost:8096",
+    "JELLYFIN_API_KEY": "your-api-key-here"
+  }
+}'
+```
+
+Or, with the global npm install:
+
+```bash
+openclaw mcp set jellyfin '{
+  "command": "jellyfin-mcp",
+  "env": {
+    "JELLYFIN_URL": "http://localhost:8096",
+    "JELLYFIN_API_KEY": "your-api-key-here"
+  }
+}'
+```
+
+Then restart the OpenClaw gateway so the new server is picked up:
+
+```bash
+systemctl --user restart openclaw-gateway
+openclaw mcp list   # confirm "jellyfin" is registered
 ```
 
 ### Remote Jellyfin via SSH tunnel
