@@ -26,7 +26,7 @@ Companion to [arr-cli](https://github.com/solomonneas/arr-cli) (the *arr stack C
 - User admin: list, create, delete, enable/disable, reset password
 - Activity log queries for recent events
 - Destructive ops (`restart`, `shutdown`, `delete_user`, `set_user_password`) require explicit `confirm: true`
-- Works with Claude Desktop, Claude Code, OpenClaw, Hermes Agent, and any MCP-compatible client
+- Works with Claude Desktop, Claude Code, OpenClaw, Hermes Agent, Codex CLI, and any MCP-compatible client
 
 ## Tools
 
@@ -209,6 +209,32 @@ Then reload MCP from inside a Hermes session:
 
 ```
 /reload-mcp
+```
+
+### Codex CLI
+
+[Codex CLI](https://github.com/openai/codex) registers MCP servers via `codex mcp add`:
+
+```bash
+codex mcp add jellyfin \
+  --env JELLYFIN_URL=http://localhost:8096 \
+  --env JELLYFIN_API_KEY=your-api-key-here \
+  -- jellyfin-mcp
+```
+
+Or, when running from a source checkout:
+
+```bash
+codex mcp add jellyfin \
+  --env JELLYFIN_URL=http://localhost:8096 \
+  --env JELLYFIN_API_KEY=your-api-key-here \
+  -- node /absolute/path/to/jellyfin-mcp/dist/index.js
+```
+
+Codex writes the entry to `~/.codex/config.toml` under `[mcp_servers.jellyfin]`. Verify with:
+
+```bash
+codex mcp list
 ```
 
 ### Remote Jellyfin via SSH tunnel
