@@ -1,4 +1,10 @@
-# jellyfin-mcp
+<p align="center">
+  <img src="assets/jellyfish.svg" alt="jellyfin-mcp jellyfish" width="180" />
+</p>
+
+<h1 align="center">jellyfin-mcp</h1>
+
+<p align="center"><em>Speak to your Jellyfin server in tool calls.</em></p>
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green?logo=node.js)](https://nodejs.org/)

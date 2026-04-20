@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220" width="200" height="220" role="img" aria-label="jellyfin-mcp jellyfish">
+  <defs>
+    <linearGradient id="bell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c4b5fd"/>
+      <stop offset="60%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- bell with wavy skirt -->
+  <path d="M 28 110 Q 100 8 172 110 Q 172 130 152 122 Q 132 114 112 128 Q 92 114 72 122 Q 52 130 28 110 Z"
+        fill="url(#bell)"/>
+
+  <!-- bell highlight -->
+  <ellipse cx="80" cy="58" rx="28" ry="9" fill="url(#glow)"/>
+
+  <!-- inner bell stripes -->
+  <g stroke="#ddd6fe" stroke-width="1.4" fill="none" opacity="0.55">
+    <path d="M 60 95 Q 100 65 140 95"/>
+    <path d="M 70 105 Q 100 80 130 105"/>
+  </g>
+
+  <!-- tentacles -->
+  <g fill="none" stroke="#7c3aed" stroke-width="2.6" stroke-linecap="round" opacity="0.9">
+    <path d="M 42 118 Q 52 145 38 170 Q 32 185 42 205"/>
+    <path d="M 70 124 Q 78 150 64 175 Q 58 190 70 208"/>
+    <path d="M 100 130 Q 92 158 105 182 Q 112 196 100 212"/>
+    <path d="M 130 124 Q 122 150 136 175 Q 142 190 130 208"/>
+    <path d="M 158 118 Q 148 145 162 170 Q 168 185 158 205"/>
+  </g>
+
+  <!-- thinner inner tentacles for depth -->
+  <g fill="none" stroke="#a78bfa" stroke-width="1.4" stroke-linecap="round" opacity="0.7">
+    <path d="M 56 122 Q 64 145 54 170"/>
+    <path d="M 84 128 Q 92 150 82 175"/>
+    <path d="M 116 128 Q 108 150 118 175"/>
+    <path d="M 144 122 Q 136 145 146 170"/>
+  </g>
+</svg>
