@@ -22,3 +22,13 @@ export function fail(error: unknown): ToolResult {
     isError: true,
   };
 }
+
+// Returned by destructive tools when confirm: true was not passed. Surfaces
+// as an isError result so MCP clients see it as a refusal, not a success.
+export function refuseUnconfirmed(action: string): ToolResult {
+  return fail(
+    new Error(
+      `Refusing to ${action} without explicit confirmation. Re-call this tool with confirm: true to proceed.`,
+    ),
+  );
+}

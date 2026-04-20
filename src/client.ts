@@ -8,7 +8,15 @@ import type {
   ItemsResponse,
   ActivityLogResponse,
   ScheduledTask,
+  Playlist,
+  PlayCommand,
 } from "./types.js";
+
+// 1 tick = 100 nanoseconds. Centralized so callers pass seconds and we convert
+// once at the boundary instead of leaking ticks into tool argument schemas.
+const TICKS_PER_SECOND = 10_000_000;
+export const secondsToTicks = (seconds: number): number =>
+  Math.floor(seconds * TICKS_PER_SECOND);
 
 export class JellyfinClient {
   private baseUrl: string;
@@ -233,6 +241,230 @@ export class JellyfinClient {
     await this.request(
       `/ScheduledTasks/Running/${encodeURIComponent(taskId)}`,
       { method: "POST" },
+      false,
+    );
+  }
+
+  // ── Playback (deeper) ─────────────────────────────────────────────────────
+  async seekSession(sessionId: string, positionSec: number): Promise<void> {
+    const ticks = secondsToTicks(positionSec);
+    await this.request(
+      `/Sessions/${encodeURIComponent(sessionId)}/Playing/Seek?seekPositionTicks=${ticks}`,
+      { method: "POST" },
+      false,
+    );
+  }
+
+  async nextTrack(sessionId: string): Promise<void> {
+    await this.request(
+      `/Sessions/${encodeURIComponent(sessionId)}/Playing/NextTrack`,
+      { method: "POST" },
+      false,
+    );
+  }
+
+  async previousTrack(sessionId: string): Promise<void> {
+    await this.request(
+      `/Sessions/${encodeURIComponent(sessionId)}/Playing/PreviousTrack`,
+      { method: "POST" },
+      false,
+    );
+  }
+
+  // SetAudioStreamIndex / SetSubtitleStreamIndex are GeneralCommandType values,
+  // not playstate commands — they go through /Sessions/{id}/Command with the
+  // index passed via Arguments.Index (stringified, per Jellyfin's command DTO).
+  async setAudioStream(sessionId: string, index: number): Promise<void> {
+    await this.request(
+      `/Sessions/${encodeURIComponent(sessionId)}/Command`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          Name: "SetAudioStreamIndex",
+          Arguments: { Index: String(index) },
+        }),
+      },
+      false,
+    );
+  }
+
+  async setSubtitleStream(sessionId: string, index: number): Promise<void> {
+    await this.request(
+      `/Sessions/${encodeURIComponent(sessionId)}/Command`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          Name: "SetSubtitleStreamIndex",
+          Arguments: { Index: String(index) },
+        }),
+      },
+      false,
+    );
+  }
+
+  // /Sessions/{id}/Command takes a generic command envelope. Volume goes
+  // 0–100 as a string in Arguments.Volume.
+  async sendVolume(sessionId: string, volume: number): Promise<void> {
+    await this.request(
+      `/Sessions/${encodeURIComponent(sessionId)}/Command`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          Name: "SetVolume",
+          Arguments: { Volume: String(volume) },
+        }),
+      },
+      false,
+    );
+  }
+
+  async sendMuteCommand(sessionId: string, action: "Mute" | "Unmute" | "ToggleMute"): Promise<void> {
+    await this.request(
+      `/Sessions/${encodeURIComponent(sessionId)}/Command`,
+      {
+        method: "POST",
+        body: JSON.stringify({ Name: action }),
+      },
+      false,
+    );
+  }
+
+  // Cast/remote-play: tell a session to play one or more items.
+  async playOnSession(
+    sessionId: string,
+    itemIds: string[],
+    playCommand: PlayCommand = "PlayNow",
+    startPositionSec?: number,
+  ): Promise<void> {
+    const params = new URLSearchParams({
+      playCommand,
+      itemIds: itemIds.join(","),
+    });
+    if (startPositionSec !== undefined) {
+      params.set("startPositionTicks", String(secondsToTicks(startPositionSec)));
+    }
+    await this.request(
+      `/Sessions/${encodeURIComponent(sessionId)}/Playing?${params.toString()}`,
+      { method: "POST" },
+      false,
+    );
+  }
+
+  // ── User data (watched / favorite) ────────────────────────────────────────
+  async markPlayed(userId: string, itemId: string): Promise<void> {
+    await this.request(
+      `/Users/${encodeURIComponent(userId)}/PlayedItems/${encodeURIComponent(itemId)}`,
+      { method: "POST" },
+      false,
+    );
+  }
+
+  async markUnplayed(userId: string, itemId: string): Promise<void> {
+    await this.request(
+      `/Users/${encodeURIComponent(userId)}/PlayedItems/${encodeURIComponent(itemId)}`,
+      { method: "DELETE" },
+      false,
+    );
+  }
+
+  async setFavorite(userId: string, itemId: string): Promise<void> {
+    await this.request(
+      `/Users/${encodeURIComponent(userId)}/FavoriteItems/${encodeURIComponent(itemId)}`,
+      { method: "POST" },
+      false,
+    );
+  }
+
+  async unsetFavorite(userId: string, itemId: string): Promise<void> {
+    await this.request(
+      `/Users/${encodeURIComponent(userId)}/FavoriteItems/${encodeURIComponent(itemId)}`,
+      { method: "DELETE" },
+      false,
+    );
+  }
+
+  // ── Playlists ─────────────────────────────────────────────────────────────
+  async listPlaylists(userId: string): Promise<ItemsResponse> {
+    const params = new URLSearchParams({
+      UserId: userId,
+      Recursive: "true",
+      IncludeItemTypes: "Playlist",
+    });
+    return this.request<ItemsResponse>(`/Items?${params.toString()}`);
+  }
+
+  async createPlaylist(
+    name: string,
+    userId: string,
+    itemIds: string[] = [],
+    mediaType?: string,
+  ): Promise<Playlist> {
+    return this.request<Playlist>("/Playlists", {
+      method: "POST",
+      body: JSON.stringify({
+        Name: name,
+        UserId: userId,
+        Ids: itemIds,
+        ...(mediaType ? { MediaType: mediaType } : {}),
+      }),
+    });
+  }
+
+  async getPlaylistItems(playlistId: string, userId: string): Promise<ItemsResponse> {
+    const params = new URLSearchParams({ UserId: userId });
+    return this.request<ItemsResponse>(
+      `/Playlists/${encodeURIComponent(playlistId)}/Items?${params.toString()}`,
+    );
+  }
+
+  async addToPlaylist(playlistId: string, itemIds: string[], userId: string): Promise<void> {
+    const params = new URLSearchParams({
+      Ids: itemIds.join(","),
+      UserId: userId,
+    });
+    await this.request(
+      `/Playlists/${encodeURIComponent(playlistId)}/Items?${params.toString()}`,
+      { method: "POST" },
+      false,
+    );
+  }
+
+  // EntryIds here are the per-row playlist entry IDs (NOT the underlying item
+  // IDs). Get them from the PlaylistItemId field returned by getPlaylistItems.
+  async removeFromPlaylist(playlistId: string, entryIds: string[]): Promise<void> {
+    const params = new URLSearchParams({ EntryIds: entryIds.join(",") });
+    await this.request(
+      `/Playlists/${encodeURIComponent(playlistId)}/Items?${params.toString()}`,
+      { method: "DELETE" },
+      false,
+    );
+  }
+
+  // ── Collections ───────────────────────────────────────────────────────────
+  async createCollection(name: string, itemIds: string[] = []): Promise<{ Id: string }> {
+    const params = new URLSearchParams({ Name: name });
+    if (itemIds.length > 0) {
+      params.set("Ids", itemIds.join(","));
+    }
+    return this.request<{ Id: string }>(`/Collections?${params.toString()}`, {
+      method: "POST",
+    });
+  }
+
+  async addToCollection(collectionId: string, itemIds: string[]): Promise<void> {
+    const params = new URLSearchParams({ Ids: itemIds.join(",") });
+    await this.request(
+      `/Collections/${encodeURIComponent(collectionId)}/Items?${params.toString()}`,
+      { method: "POST" },
+      false,
+    );
+  }
+
+  async removeFromCollection(collectionId: string, itemIds: string[]): Promise<void> {
+    const params = new URLSearchParams({ Ids: itemIds.join(",") });
+    await this.request(
+      `/Collections/${encodeURIComponent(collectionId)}/Items?${params.toString()}`,
+      { method: "DELETE" },
       false,
     );
   }

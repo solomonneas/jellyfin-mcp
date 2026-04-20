@@ -119,3 +119,32 @@ export interface ScheduledTask {
   };
   [key: string]: unknown;
 }
+
+export interface Playlist {
+  Id: string;
+  Name: string;
+  ChildCount?: number;
+  MediaType?: string;
+  [key: string]: unknown;
+}
+
+export interface UserItemData {
+  PlaybackPositionTicks?: number;
+  PlayCount?: number;
+  IsFavorite?: boolean;
+  Played?: boolean;
+  Key?: string;
+  [key: string]: unknown;
+}
+
+// Jellyfin playCommand values for POST /Sessions/{id}/Playing
+export type PlayCommand = "PlayNow" | "PlayNext" | "PlayLast";
+
+// Jellyfin general-command names used by POST /Sessions/{id}/Command
+// Volume goes 0–100 as a string in Arguments.Volume.
+export type GeneralCommand =
+  | "SetVolume"
+  | "Mute"
+  | "Unmute"
+  | "ToggleMute"
+  | "DisplayMessage";

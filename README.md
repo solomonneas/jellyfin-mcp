@@ -11,19 +11,23 @@ Companion to [arr-cli](https://github.com/solomonneas/arr-cli) (the *arr stack C
 
 ## Features
 
-- **20 MCP tools** covering system info, libraries, users, sessions, items, and scheduled tasks
-- Playback control: pause / resume / stop / send-message to any active session
+- **36 MCP tools** covering system info, libraries, users, sessions, items, scheduled tasks, user data writes, playlists, and collections
+- Playback control: pause / resume / stop / seek / next / previous / volume / mute / audio-stream / subtitle-stream / cast (remote-play) / send-message
+- User data writes: mark watched/unwatched, add/remove favorites
+- Playlists: create, list, append, remove entries
+- Collections: create, add, remove
 - Library scan triggering (per-library or all)
 - User admin: list, create, delete, enable/disable, reset password
 - Activity log queries for recent events
+- Destructive ops (`restart`, `shutdown`, `delete_user`, `set_user_password`) require explicit `confirm: true`
 - Works with Claude Desktop, Claude Code, any MCP-compatible client
 
 ## Tools
 
 ### System
 - `jellyfin_get_status` — server name, version, OS, pending restart, update availability
-- `jellyfin_restart_server` — restart the Jellyfin process
-- `jellyfin_shutdown_server` — stop the Jellyfin process
+- `jellyfin_restart_server` — restart the Jellyfin process *(requires `confirm: true`)*
+- `jellyfin_shutdown_server` — stop the Jellyfin process *(requires `confirm: true`)*
 
 ### Libraries
 - `jellyfin_list_libraries` — all virtual folders with IDs, collection types, paths
@@ -32,9 +36,9 @@ Companion to [arr-cli](https://github.com/solomonneas/arr-cli) (the *arr stack C
 ### Users
 - `jellyfin_list_users` — with admin / disabled flags and last login timestamps
 - `jellyfin_create_user`
-- `jellyfin_delete_user`
+- `jellyfin_delete_user` *(requires `confirm: true`)*
 - `jellyfin_set_user_disabled`
-- `jellyfin_set_user_password`
+- `jellyfin_set_user_password` *(requires `confirm: true`)*
 
 ### Sessions & Playback
 - `jellyfin_list_sessions` — active/idle clients with now-playing, progress, paused state
@@ -42,6 +46,27 @@ Companion to [arr-cli](https://github.com/solomonneas/arr-cli) (the *arr stack C
 - `jellyfin_resume_session`
 - `jellyfin_stop_session`
 - `jellyfin_send_message_to_session` — toast/dialog on the client
+- `jellyfin_seek_session` — jump to a position in seconds
+- `jellyfin_next_track` / `jellyfin_previous_track`
+- `jellyfin_set_volume` (0–100) / `jellyfin_set_mute` (mute/unmute/toggle)
+- `jellyfin_set_audio_stream` / `jellyfin_set_subtitle_stream` (use -1 to disable subtitles)
+- `jellyfin_play_on_session` — cast/remote-play one or more items to a session (PlayNow / PlayNext / PlayLast)
+
+### User Data
+- `jellyfin_mark_played` / `jellyfin_mark_unplayed`
+- `jellyfin_set_favorite` / `jellyfin_unset_favorite`
+
+### Playlists
+- `jellyfin_list_playlists`
+- `jellyfin_create_playlist`
+- `jellyfin_get_playlist_items` — returns `playlistEntryId` (use this for removal, not the raw item ID)
+- `jellyfin_add_to_playlist`
+- `jellyfin_remove_from_playlist`
+
+### Collections
+- `jellyfin_create_collection`
+- `jellyfin_add_to_collection`
+- `jellyfin_remove_from_collection`
 
 ### Items
 - `jellyfin_search_items` — by name, optional type filter

@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { ok, fail } from "./_util.js";
+import { ok, fail, refuseUnconfirmed } from "./_util.js";
 
 export function registerSystemTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -28,9 +29,14 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
 
   server.tool(
     "jellyfin_restart_server",
-    "Restart the Jellyfin server process. Use only when necessary — active playback sessions will disconnect.",
-    {},
-    async () => {
+    "Restart the Jellyfin server process. Destructive: active playback sessions disconnect. Requires confirm: true.",
+    {
+      confirm: z
+        .literal(true)
+        .describe("Must be true. Required acknowledgement that active sessions will disconnect."),
+    },
+    async ({ confirm }) => {
+      if (!confirm) return refuseUnconfirmed("restart the Jellyfin server");
       try {
         await client.restart();
         return ok({ result: "restart signal sent" });
@@ -42,9 +48,14 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
 
   server.tool(
     "jellyfin_shutdown_server",
-    "Shut down the Jellyfin server. Users will need to start it manually (or via OS service) to bring it back.",
-    {},
-    async () => {
+    "Shut down the Jellyfin server. Destructive: server stays down until something restarts it manually. Requires confirm: true.",
+    {
+      confirm: z
+        .literal(true)
+        .describe("Must be true. Required acknowledgement that the server will not come back on its own."),
+    },
+    async ({ confirm }) => {
+      if (!confirm) return refuseUnconfirmed("shut down the Jellyfin server");
       try {
         await client.shutdown();
         return ok({ result: "shutdown signal sent" });

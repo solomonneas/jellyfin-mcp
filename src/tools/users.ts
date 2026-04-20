@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { ok, fail } from "./_util.js";
+import { ok, fail, refuseUnconfirmed } from "./_util.js";
 
 export function registerUserTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -49,11 +49,15 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
 
   server.tool(
     "jellyfin_delete_user",
-    "Delete a Jellyfin user permanently. This does NOT delete their watch history or associated items — only the account.",
+    "Delete a Jellyfin user permanently. Destructive and not undoable. Requires confirm: true.",
     {
       userId: z.string().describe("User ID from jellyfin_list_users"),
+      confirm: z
+        .literal(true)
+        .describe("Must be true. Required acknowledgement that the account will be permanently deleted."),
     },
-    async ({ userId }) => {
+    async ({ userId, confirm }) => {
+      if (!confirm) return refuseUnconfirmed(`delete user ${userId}`);
       try {
         await client.deleteUser(userId);
         return ok({ result: `user ${userId} deleted` });
@@ -84,12 +88,16 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
 
   server.tool(
     "jellyfin_set_user_password",
-    "Set (or reset) a Jellyfin user's password.",
+    "Set (or reset) a Jellyfin user's password. Destructive: locks the user out of any old password. Requires confirm: true.",
     {
       userId: z.string().describe("User ID from jellyfin_list_users"),
       newPassword: z.string().min(1).describe("The new password in plaintext (Jellyfin hashes server-side)"),
+      confirm: z
+        .literal(true)
+        .describe("Must be true. Required acknowledgement that the existing password will be replaced."),
     },
-    async ({ userId, newPassword }) => {
+    async ({ userId, newPassword, confirm }) => {
+      if (!confirm) return refuseUnconfirmed(`change the password for user ${userId}`);
       try {
         await client.setUserPassword(userId, newPassword);
         return ok({ result: `password updated for user ${userId}` });

@@ -1,6 +1,6 @@
 {
   "name": "jellyfin-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for Jellyfin media server — control sessions, scan libraries, manage users, query content, and run scheduled tasks via LLM tool calls",
   "type": "module",
   "main": "dist/index.js",
