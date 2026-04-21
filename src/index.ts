@@ -11,6 +11,8 @@ import { registerTaskTools } from "./tools/tasks.js";
 import { registerUserDataTools } from "./tools/userdata.js";
 import { registerPlaylistTools } from "./tools/playlists.js";
 import { registerCollectionTools } from "./tools/collections.js";
+import { registerDiscoveryTools } from "./tools/discovery.js";
+import { registerQuickConnectTools } from "./tools/quickconnect.js";
 
 async function main(): Promise<void> {
   const config = getConfig();
@@ -21,9 +23,9 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: "jellyfin-mcp",
-    version: "0.2.0",
+    version: "0.3.0",
     description:
-      "MCP server for Jellyfin — control playback sessions (pause/resume/seek/volume/cast), manage users and libraries, mark watched/favorite, manage playlists and collections, run scheduled tasks, query content, and inspect activity logs.",
+      "MCP server for Jellyfin — control playback sessions (pause/resume/seek/volume/cast), manage users and libraries, mark watched/favorite, manage playlists and collections, run scheduled tasks, query content, discover resume/next-up/similar items, authorize Quick Connect codes, and inspect activity logs.",
   });
 
   const client = new JellyfinClient(config);
@@ -37,6 +39,8 @@ async function main(): Promise<void> {
   registerUserDataTools(server, client);
   registerPlaylistTools(server, client);
   registerCollectionTools(server, client);
+  registerDiscoveryTools(server, client);
+  registerQuickConnectTools(server, client);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
