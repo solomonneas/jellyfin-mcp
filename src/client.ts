@@ -226,6 +226,65 @@ export class JellyfinClient {
     return this.request<Item>(`/Items/${encodeURIComponent(itemId)}`);
   }
 
+  // ── Discovery (Resume / NextUp / Similar) ─────────────────────────────────
+  // Resume is per-user: Jellyfin tracks playback position on the user row, not
+  // the item row. Episodes and movies with PlaybackPositionTicks > 0 show up.
+  async getResumeItems(userId: string, limit = 20): Promise<ItemsResponse> {
+    const params = new URLSearchParams({
+      Limit: String(limit),
+      Fields: "SeriesName,ProductionYear,UserData",
+    });
+    return this.request<ItemsResponse>(
+      `/Users/${encodeURIComponent(userId)}/Items/Resume?${params.toString()}`,
+    );
+  }
+
+  // NextUp returns the next unwatched episode per-series, filtered to one user.
+  // seriesId is optional — omit to get next-up across all series.
+  async getNextUp(userId: string, limit = 20, seriesId?: string): Promise<ItemsResponse> {
+    const params = new URLSearchParams({
+      userId,
+      Limit: String(limit),
+      Fields: "SeriesName,ProductionYear,UserData",
+    });
+    if (seriesId) params.set("seriesId", seriesId);
+    return this.request<ItemsResponse>(`/Shows/NextUp?${params.toString()}`);
+  }
+
+  // Similar uses Jellyfin's built-in recommender (genre/tag/studio overlap).
+  // userId is optional but recommended — it lets Jellyfin exclude already-watched
+  // items and hydrate UserData on the response.
+  async getSimilarItems(itemId: string, userId?: string, limit = 20): Promise<ItemsResponse> {
+    const params = new URLSearchParams({ Limit: String(limit) });
+    if (userId) params.set("userId", userId);
+    return this.request<ItemsResponse>(
+      `/Items/${encodeURIComponent(itemId)}/Similar?${params.toString()}`,
+    );
+  }
+
+  // ── Quick Connect ─────────────────────────────────────────────────────────
+  // Quick Connect lets a user log in on a new client by typing a 6-character
+  // code into an already-authenticated client. Flow:
+  //   1. New client calls POST /QuickConnect/Initiate → gets a code + secret
+  //   2. User reads the code out loud / types it into an admin client
+  //   3. Admin calls POST /QuickConnect/Authorize?code=XXXXXX&userId=<user-id>
+  //   4. New client polls GET /QuickConnect/Connect?secret=... until authorized,
+  //      then trades the secret for an access token.
+  // The MCP exposes steps 1 and 3: status (is QC enabled), authorize (admin
+  // approves a pending code for a given user). Listing pending codes isn't an
+  // endpoint — codes are known only to the user who initiated.
+  async getQuickConnectEnabled(): Promise<boolean> {
+    return this.request<boolean>("/QuickConnect/Enabled");
+  }
+
+  async authorizeQuickConnect(code: string, userId: string): Promise<boolean> {
+    const params = new URLSearchParams({ code, userId });
+    return this.request<boolean>(
+      `/QuickConnect/Authorize?${params.toString()}`,
+      { method: "POST" },
+    );
+  }
+
   // ── Activity & Tasks ──────────────────────────────────────────────────────
   async getActivityLog(limit = 20, minDate?: string): Promise<ActivityLogResponse> {
     const params = new URLSearchParams({ Limit: String(limit) });

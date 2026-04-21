@@ -78,6 +78,11 @@ export interface Item {
   ProductionYear?: number;
   DateCreated?: string;
   RunTimeTicks?: number;
+  // Episode-specific: season (ParentIndexNumber) and episode (IndexNumber).
+  ParentIndexNumber?: number;
+  IndexNumber?: number;
+  CommunityRating?: number;
+  UserData?: UserItemData;
   [key: string]: unknown;
 }
 
@@ -130,6 +135,7 @@ export interface Playlist {
 
 export interface UserItemData {
   PlaybackPositionTicks?: number;
+  PlayedPercentage?: number;
   PlayCount?: number;
   IsFavorite?: boolean;
   Played?: boolean;

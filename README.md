@@ -17,15 +17,17 @@ Companion to [arr-cli](https://github.com/solomonneas/arr-cli) (the *arr stack C
 
 ## Features
 
-- **36 MCP tools** covering system info, libraries, users, sessions, items, scheduled tasks, user data writes, playlists, and collections
+- **41 MCP tools** covering system info, libraries, users, sessions, items, scheduled tasks, user data writes, playlists, collections, discovery, and Quick Connect
 - Playback control: pause / resume / stop / seek / next / previous / volume / mute / audio-stream / subtitle-stream / cast (remote-play) / send-message
 - User data writes: mark watched/unwatched, add/remove favorites
 - Playlists: create, list, append, remove entries
 - Collections: create, add, remove
+- Discovery: resume queue, next-up episodes, similar items
+- Quick Connect: check status, authorize a pending code for a user
 - Library scan triggering (per-library or all)
 - User admin: list, create, delete, enable/disable, reset password
 - Activity log queries for recent events
-- Destructive ops (`restart`, `shutdown`, `delete_user`, `set_user_password`) require explicit `confirm: true`
+- Destructive / privileged ops (`restart`, `shutdown`, `delete_user`, `set_user_password`, `quick_connect_authorize`) require explicit `confirm: true`
 - Works with Claude Desktop, Claude Code, OpenClaw, Hermes Agent, Codex CLI, and any MCP-compatible client
 
 ## Tools
@@ -78,6 +80,15 @@ Companion to [arr-cli](https://github.com/solomonneas/arr-cli) (the *arr stack C
 - `jellyfin_search_items` — by name, optional type filter
 - `jellyfin_get_recent_items` — latest added (per-user)
 - `jellyfin_get_item` — full metadata
+
+### Discovery
+- `jellyfin_get_resume_items` — in-progress playback for a user, with resume position in seconds
+- `jellyfin_get_next_up` — next unwatched episode per series for a user; optional `seriesId` filter
+- `jellyfin_get_similar_items` — Jellyfin's built-in "similar" recommendations for a given item
+
+### Quick Connect
+- `jellyfin_quick_connect_status` — whether Quick Connect is enabled on the server
+- `jellyfin_quick_connect_authorize` — approve a pending code for a user *(requires `confirm: true`)*
 
 ### Tasks & Activity
 - `jellyfin_list_scheduled_tasks`
@@ -268,6 +279,18 @@ Calls `jellyfin_list_libraries` to find the ID, then `jellyfin_scan_library`.
 > What scheduled tasks have failed recently?
 
 `jellyfin_list_scheduled_tasks` and filter by `lastStatus`.
+
+> What was I watching last night?
+
+Calls `jellyfin_get_resume_items` with the user's ID — returns in-progress episodes/movies with resume position in seconds.
+
+> What's the next episode of this show for me?
+
+Calls `jellyfin_get_next_up` with the user's ID, optionally narrowed with `seriesId`.
+
+> Approve my phone's Jellyfin login — the code is `ABCDEF`.
+
+Calls `jellyfin_list_users` to resolve the target user, then `jellyfin_quick_connect_authorize` with `code`, `userId`, and `confirm: true`.
 
 ## Development
 

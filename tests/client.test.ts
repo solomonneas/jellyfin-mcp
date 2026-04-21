@@ -182,4 +182,103 @@ describe("JellyfinClient", () => {
     expect(parsed.searchParams.get("Name")).toBe("Best of");
     expect(parsed.searchParams.get("Ids")).toBeNull();
   });
+
+  it("getResumeItems hits per-user Resume path", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ Items: [{ Id: "i1", Name: "Ep", Type: "Episode" }], TotalRecordCount: 1 }),
+        { status: 200 },
+      ),
+    );
+    const result = await client.getResumeItems("user-42", 10);
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.pathname).toBe("/Users/user-42/Items/Resume");
+    expect(parsed.searchParams.get("Limit")).toBe("10");
+    expect(result.Items[0].Id).toBe("i1");
+  });
+
+  it("getResumeItems URL-encodes the userId into the path", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 }),
+    );
+    await client.getResumeItems("user/with space", 5);
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.pathname).toBe("/Users/user%2Fwith%20space/Items/Resume");
+  });
+
+  it("getNextUp sends userId as a query param (not a path segment)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 }),
+    );
+    await client.getNextUp("user-42", 5);
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.pathname).toBe("/Shows/NextUp");
+    expect(parsed.searchParams.get("userId")).toBe("user-42");
+    expect(parsed.searchParams.get("Limit")).toBe("5");
+    expect(parsed.searchParams.get("seriesId")).toBeNull();
+  });
+
+  it("getNextUp includes seriesId when provided", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 }),
+    );
+    await client.getNextUp("user-42", 5, "series-abc");
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.searchParams.get("seriesId")).toBe("series-abc");
+  });
+
+  it("getSimilarItems URL-encodes the itemId and omits userId when absent", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 }),
+    );
+    await client.getSimilarItems("item/with space", undefined, 15);
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.pathname).toBe("/Items/item%2Fwith%20space/Similar");
+    expect(parsed.searchParams.get("Limit")).toBe("15");
+    expect(parsed.searchParams.get("userId")).toBeNull();
+  });
+
+  it("getSimilarItems includes userId when provided", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 }),
+    );
+    await client.getSimilarItems("item1", "user-42");
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.searchParams.get("userId")).toBe("user-42");
+  });
+
+  it("getQuickConnectEnabled parses a boolean body", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("true", { status: 200 }));
+    await expect(client.getQuickConnectEnabled()).resolves.toBe(true);
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://jellyfin.test/QuickConnect/Enabled");
+  });
+
+  it("authorizeQuickConnect POSTs code + userId as query params", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("true", { status: 200 }));
+    await client.authorizeQuickConnect("ABC123", "user-42");
+    const [url, opts] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.pathname).toBe("/QuickConnect/Authorize");
+    expect(parsed.searchParams.get("code")).toBe("ABC123");
+    expect(parsed.searchParams.get("userId")).toBe("user-42");
+    expect(opts.method).toBe("POST");
+  });
+
+  it("authorizeQuickConnect URL-encodes code and userId (reserved chars)", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("true", { status: 200 }));
+    // URLSearchParams encodes with + for spaces; verify the server sees the
+    // original values via .get() rather than string-matching the raw URL.
+    await client.authorizeQuickConnect("A B&C=D", "user/42?x");
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.searchParams.get("code")).toBe("A B&C=D");
+    expect(parsed.searchParams.get("userId")).toBe("user/42?x");
+  });
 });
