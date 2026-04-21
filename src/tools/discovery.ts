@@ -19,6 +19,8 @@ export function registerDiscoveryTools(
     {
       userId: z
         .string()
+        .trim()
+        .min(1)
         .describe("User ID whose resume queue to fetch. Use jellyfin_list_users to find IDs."),
       limit: z.number().int().positive().max(100).optional().default(20),
     },
@@ -52,9 +54,13 @@ export function registerDiscoveryTools(
     {
       userId: z
         .string()
+        .trim()
+        .min(1)
         .describe("User ID to compute next-up for. Required — next-up is a per-user view."),
       seriesId: z
         .string()
+        .trim()
+        .min(1)
         .optional()
         .describe("Optional series ID to restrict to one show. Omit for all series."),
       limit: z.number().int().positive().max(100).optional().default(20),
@@ -87,9 +93,13 @@ export function registerDiscoveryTools(
     {
       itemId: z
         .string()
+        .trim()
+        .min(1)
         .describe("Anchor item ID to find similars for (from jellyfin_search_items or similar)."),
       userId: z
         .string()
+        .trim()
+        .min(1)
         .optional()
         .describe("Optional user context — when provided, Jellyfin filters to that user's library visibility and hydrates watched state."),
       limit: z.number().int().positive().max(100).optional().default(20),
