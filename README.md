@@ -6,6 +6,7 @@
 
 <p align="center"><em>Speak to your Jellyfin server in tool calls.</em></p>
 
+[![GitHub release](https://img.shields.io/github/v/release/solomonneas/jellyfin-mcp?label=release&color=blue)](https://github.com/solomonneas/jellyfin-mcp/releases/latest)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green?logo=node.js)](https://nodejs.org/)
 [![MCP](https://img.shields.io/badge/MCP-1.x-purple)](https://modelcontextprotocol.io/)
