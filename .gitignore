@@ -6,3 +6,7 @@ dist/
 .env.*
 coverage/
 .claude/
+.codex/
+
+# Local learnings (never commit)
+.learnings/
