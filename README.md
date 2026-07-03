@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/jellyctrl-banner.jpg" alt="jellyctrl banner" width="900">
+  <img src="docs/assets/jellyctrl-social-preview.jpg" alt="jellyctrl banner" width="900">
 </p>
 
 <h1 align="center">jellyctrl</h1>
@@ -19,8 +19,8 @@
 </p>
 
 <p align="center">
-  <img src="https://shieldcn.dev/npm/jellyfin-mcp.svg" alt="npm version">
   <img src="https://shieldcn.dev/github/ci/lidless-labs/jellyctrl.svg?branch=main&workflow=ci.yml" alt="CI status">
+  <img src="https://shieldcn.dev/npm/jellyfin-mcp.svg" alt="npm version">
   <img src="https://shieldcn.dev/badge/MCP-server-8A2BE2.svg" alt="MCP server">
   <img src="https://shieldcn.dev/badge/license-MIT-green.svg" alt="MIT License">
 </p>
