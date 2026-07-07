@@ -1,6 +1,6 @@
 {
   "name": "jellyfin-mcp",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "jellyctrl operator CLI for Jellyfin with a compatible MCP adapter for typed tool calls",
   "type": "module",
   "main": "dist/index.js",
