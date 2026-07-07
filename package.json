@@ -1,13 +1,13 @@
 {
   "name": "jellyfin-mcp",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "jellyctrl operator CLI for Jellyfin with a compatible MCP adapter for typed tool calls",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "jellyfin-mcp": "./dist/mcp-bin.js",
-    "jellyctrl": "./dist/cli.js",
-    "jellyctl": "./dist/cli.js"
+    "jellyfin-mcp": "dist/mcp-bin.js",
+    "jellyctrl": "dist/cli.js",
+    "jellyctl": "dist/cli.js"
   },
   "scripts": {
     "build": "tsup",
@@ -23,7 +23,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lidless-labs/jellyctrl.git"
+    "url": "git+https://github.com/lidless-labs/jellyctrl.git"
   },
   "homepage": "https://github.com/lidless-labs/jellyctrl#readme",
   "bugs": {
