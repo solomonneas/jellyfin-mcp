@@ -7,7 +7,7 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   sourcemap: true,
-  dts: true,
+  dts: false,
   // Each bin must be self-contained; no shared chunk imports between the two
   // executables and the server module.
   splitting: false,
