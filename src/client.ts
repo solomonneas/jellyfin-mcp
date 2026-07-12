@@ -1,6 +1,14 @@
 import { Effect } from "effect";
 import { Agent } from "undici";
 import type { JellyfinConfig } from "./config.js";
+import {
+  JellyfinHttpError,
+  JellyfinParseError,
+  JellyfinTimeoutError,
+  JellyfinTransportError,
+  type JellyfinRequestError,
+} from "./effect/errors.js";
+import { mapHttpError } from "./effect/request.js";
 import type {
   SystemInfo,
   Library,
@@ -47,14 +55,20 @@ export class JellyfinClient {
     options: RequestInit = {},
     parseJson = true,
   ): Promise<T> {
-    return Effect.runPromise(this.requestEffect<T>(path, options, parseJson));
+    const result = await Effect.runPromise(
+      Effect.either(this.requestEffect<T>(path, options, parseJson)),
+    );
+    if (result._tag === "Left") {
+      throw this.toPublicError(result.left);
+    }
+    return result.right;
   }
 
   private requestEffect<T>(
     path: string,
     options: RequestInit = {},
     parseJson = true,
-  ): Effect.Effect<T, Error, never> {
+  ): Effect.Effect<T, JellyfinRequestError, never> {
     const url = `${this.baseUrl}${path}`;
 
     // Jellyfin accepts the token in either X-Emby-Token or X-MediaBrowser-Token.
@@ -88,13 +102,7 @@ export class JellyfinClient {
 
             if (!response.ok) {
               const body = await response.text().catch(() => "");
-              const messages: Record<number, string> = {
-                401: "Invalid API key or unauthorized access",
-                403: "Forbidden - API key lacks permission for this operation",
-                404: `Resource not found: ${path}`,
-                500: "Jellyfin server error",
-              };
-              const msg = messages[response.status] ?? `HTTP ${response.status}`;
+              const error = mapHttpError(path, response, body);
               // The raw downstream body can carry internal Jellyfin detail (stack
               // traces, internal paths, IDs). fail() returns thrown messages verbatim
               // to the LLM/MCP client, so log the full body server-side (stderr) for
@@ -105,7 +113,7 @@ export class JellyfinClient {
                   `jellyfin-mcp: HTTP ${response.status} from ${path}: ${body}`,
                 );
               }
-              throw new Error(`${msg} (HTTP ${response.status})`);
+              throw error;
             }
 
             if (!parseJson) {
@@ -121,17 +129,40 @@ export class JellyfinClient {
             if (!text) {
               return undefined as T;
             }
-            return JSON.parse(text) as T;
+            try {
+              return JSON.parse(text) as T;
+            } catch (cause) {
+              throw new JellyfinParseError({ path, cause });
+            }
           },
           catch: (error) => {
-            if (error instanceof Error && error.name === "AbortError") {
-              return new Error(`Request to ${path} timed out after ${this.timeout}ms`);
+            if (
+              error instanceof JellyfinHttpError ||
+              error instanceof JellyfinParseError
+            ) {
+              return error;
             }
-            return error instanceof Error ? error : new Error(String(error));
+            if (error instanceof Error && error.name === "AbortError") {
+              return new JellyfinTimeoutError({ path, timeout: this.timeout });
+            }
+            return new JellyfinTransportError({ path, cause: error });
           },
         }),
       ({ timeoutId }) => Effect.sync(() => clearTimeout(timeoutId)),
     );
+  }
+
+  private toPublicError(error: JellyfinRequestError): Error {
+    if (error instanceof JellyfinHttpError) {
+      return new Error(`${error.summary} (HTTP ${error.status})`);
+    }
+    if (error instanceof JellyfinTimeoutError) {
+      return new Error(`Request to ${error.path} timed out after ${error.timeout}ms`);
+    }
+    if (error instanceof JellyfinParseError || error instanceof JellyfinTransportError) {
+      return error.cause instanceof Error ? error.cause : new Error(String(error.cause));
+    }
+    return new Error(String(error));
   }
 
   // ── System ────────────────────────────────────────────────────────────────
