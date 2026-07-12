@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { Effect } from "effect";
 import { JellyfinClient } from "./client.js";
 import { getConfig } from "./config.js";
+import { fromPromise } from "./effect/tool-adapter.js";
 import type {
   ActivityLogResponse,
   Item,
@@ -394,11 +395,6 @@ export interface CliDeps {
   makeClient: () => JellyfinClient;
   startServer: () => Promise<void>;
 }
-
-// Lift a Promise-returning client call into Effect, keeping the rejection
-// value as the error channel so run() can map it to exit 1 unchanged.
-const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
-  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export async function run(argv: string[], deps: CliDeps): Promise<number> {
   return Effect.runPromise(runEffect(argv, deps));

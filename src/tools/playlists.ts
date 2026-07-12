@@ -2,13 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { toToolHandler } from "../effect/tool-adapter.js";
+import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
-
-// Lift a Promise-returning client call into Effect, keeping the rejection
-// value as the error channel so handlers can map it to fail() unchanged.
-const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
-  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export function registerPlaylistTools(server: McpServer, client: JellyfinClient): void {
   server.tool(

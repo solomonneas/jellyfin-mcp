@@ -2,21 +2,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { toToolHandler } from "../effect/tool-adapter.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
 import type { Item, UserItemData } from "../types.js";
-import { ok, fail, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
-
-type ToolResult = ReturnType<typeof ok>;
-
-const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
-  Effect.tryPromise({ try: thunk, catch: (error) => error });
-
-const toolResult = (
-  effect: Effect.Effect<ToolResult, unknown, never>,
-): Effect.Effect<ToolResult, never, never> =>
-  Effect.either(effect).pipe(
-    Effect.map((result) => (result._tag === "Left" ? fail(result.left) : result.right)),
-  );
+import { ok, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 const TICKS_PER_SECOND = 10_000_000;
 const ticksToSeconds = (ticks: number | undefined | null): number | null =>

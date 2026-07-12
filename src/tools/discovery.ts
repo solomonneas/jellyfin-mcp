@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { toToolHandler } from "../effect/tool-adapter.js";
+import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, READ_ONLY } from "./_util.js";
 
 // 1 tick = 100 nanoseconds. Mirrors the constant in client.ts; kept local so
@@ -10,11 +10,6 @@ import { ok, fail, READ_ONLY } from "./_util.js";
 const TICKS_PER_SECOND = 10_000_000;
 const ticksToSeconds = (ticks: number | undefined | null): number | null =>
   typeof ticks === "number" ? Math.round(ticks / TICKS_PER_SECOND) : null;
-
-// Lift a Promise-returning client call into Effect, keeping the rejection
-// value as the error channel so handlers can map it to fail() unchanged.
-const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
-  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export function registerDiscoveryTools(
   server: McpServer,

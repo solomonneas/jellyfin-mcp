@@ -2,20 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { toToolHandler } from "../effect/tool-adapter.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, refuseUnconfirmed, DESTRUCTIVE, READ_ONLY } from "./_util.js";
-
-type ToolResult = ReturnType<typeof ok>;
-
-const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
-  Effect.tryPromise({ try: thunk, catch: (error) => error });
-
-const toolResult = (
-  effect: Effect.Effect<ToolResult, unknown, never>,
-): Effect.Effect<ToolResult, never, never> =>
-  Effect.either(effect).pipe(
-    Effect.map((result) => (result._tag === "Left" ? fail(result.left) : result.right)),
-  );
 
 // The underlying JellyfinClient.request() surfaces the failed path in the error
 // message (e.g. "Resource not found: /QuickConnect/Authorize?code=ABC123&userId=…").
