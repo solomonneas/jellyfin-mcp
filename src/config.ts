@@ -1,3 +1,11 @@
+import { Effect } from "effect";
+import {
+  normalizeBaseUrl,
+  parseTimeoutSeconds,
+  readRequiredEnv,
+} from "./effect/config.js";
+import { MissingConfigError } from "./effect/errors.js";
+
 export interface JellyfinConfig {
   url: string;
   apiKey: string;
@@ -5,44 +13,40 @@ export interface JellyfinConfig {
   timeout: number;
 }
 
-const DEFAULT_TIMEOUT_SECONDS = 30;
-
-// JELLYFIN_TIMEOUT is operator-controlled, but a typo'd value used to flow
-// through parseInt as NaN, which setTimeout coerces to ~1ms and every request
-// then aborts instantly with a misleading timeout error. Validate and fall
-// back to the default instead.
-function parseTimeoutSeconds(raw: string | undefined): number {
-  if (raw === undefined || raw.trim() === "") return DEFAULT_TIMEOUT_SECONDS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    console.error(
-      `jellyfin-mcp: invalid JELLYFIN_TIMEOUT "${raw}" (expected a positive number of seconds); using default ${DEFAULT_TIMEOUT_SECONDS}s`,
-    );
-    return DEFAULT_TIMEOUT_SECONDS;
-  }
-  return parsed;
-}
+const requireUrlMessage =
+  "JELLYFIN_URL environment variable is required (e.g. http://localhost:8096)";
+const requireApiKeyMessage =
+  "JELLYFIN_API_KEY environment variable is required. Generate one in Jellyfin: Dashboard > API Keys.";
 
 export function getConfig(): JellyfinConfig {
-  const url = process.env.JELLYFIN_URL;
-  if (!url) {
-    throw new Error("JELLYFIN_URL environment variable is required (e.g. http://localhost:8096)");
-  }
-
-  const apiKey = process.env.JELLYFIN_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "JELLYFIN_API_KEY environment variable is required. Generate one in Jellyfin: Dashboard > API Keys.",
+  const configEffect = Effect.gen(function* () {
+    const url = yield* readRequiredEnv(process.env, "JELLYFIN_URL", requireUrlMessage);
+    const apiKey = yield* readRequiredEnv(
+      process.env,
+      "JELLYFIN_API_KEY",
+      requireApiKeyMessage,
     );
+    const timeoutSeconds = yield* parseTimeoutSeconds(
+      process.env.JELLYFIN_TIMEOUT,
+      console.error,
+    );
+
+    return {
+      url: normalizeBaseUrl(url),
+      apiKey,
+      verifySsl: process.env.JELLYFIN_VERIFY_SSL !== "false",
+      timeout: timeoutSeconds * 1000,
+    };
+  });
+
+  const result = Effect.runSync(Effect.either(configEffect));
+  if (result._tag === "Left") {
+    const error = result.left;
+    if (error instanceof MissingConfigError) {
+      throw new Error(error.message);
+    }
+    throw error;
   }
 
-  const verifySsl = process.env.JELLYFIN_VERIFY_SSL !== "false";
-  const timeout = parseTimeoutSeconds(process.env.JELLYFIN_TIMEOUT) * 1000;
-
-  return {
-    url: url.replace(/\/+$/, ""),
-    apiKey,
-    verifySsl,
-    timeout,
-  };
+  return result.right;
 }
