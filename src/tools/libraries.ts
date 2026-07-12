@@ -2,8 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, fail, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 export function registerLibraryTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -12,10 +12,8 @@ export function registerLibraryTools(server: McpServer, client: JellyfinClient):
     {},
     READ_ONLY,
     toToolHandler(() =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(fromPromise(() => client.listLibraries()));
-        if (result._tag === "Left") return fail(result.left);
-        const libs = result.right;
+      toolResult(Effect.gen(function* () {
+        const libs = yield* fromPromise(() => client.listLibraries());
         return ok(
           libs.map((lib) => ({
             id: lib.ItemId,
@@ -24,7 +22,7 @@ export function registerLibraryTools(server: McpServer, client: JellyfinClient):
             locations: lib.Locations,
           })),
         );
-      }),
+      })),
     ),
   );
 
@@ -39,15 +37,14 @@ export function registerLibraryTools(server: McpServer, client: JellyfinClient):
     },
     NON_DESTRUCTIVE,
     toToolHandler(({ libraryId }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(fromPromise(() => client.scanLibraries(libraryId)));
-        if (result._tag === "Left") return fail(result.left);
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.scanLibraries(libraryId));
         return ok({
           result: libraryId
             ? `scan triggered for library ${libraryId}`
             : "scan triggered for all libraries",
         });
-      }),
+      })),
     ),
   );
 }

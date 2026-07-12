@@ -2,8 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, fail, DESTRUCTIVE, NON_DESTRUCTIVE } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, DESTRUCTIVE, NON_DESTRUCTIVE } from "./_util.js";
 
 export function registerCollectionTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -19,13 +19,10 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
     },
     NON_DESTRUCTIVE,
     toToolHandler(({ name, itemIds }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.createCollection(name, itemIds)),
-        );
-        if (result._tag === "Left") return fail(result.left);
-        return ok({ id: result.right.Id, name });
-      }),
+      toolResult(Effect.gen(function* () {
+        const collection = yield* fromPromise(() => client.createCollection(name, itemIds));
+        return ok({ id: collection.Id, name });
+      })),
     ),
   );
 
@@ -38,13 +35,10 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
     },
     NON_DESTRUCTIVE,
     toToolHandler(({ collectionId, itemIds }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.addToCollection(collectionId, itemIds)),
-        );
-        if (result._tag === "Left") return fail(result.left);
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.addToCollection(collectionId, itemIds));
         return ok({ result: `added ${itemIds.length} item(s) to collection ${collectionId}` });
-      }),
+      })),
     ),
   );
 
@@ -57,15 +51,12 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
     },
     DESTRUCTIVE,
     toToolHandler(({ collectionId, itemIds }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.removeFromCollection(collectionId, itemIds)),
-        );
-        if (result._tag === "Left") return fail(result.left);
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.removeFromCollection(collectionId, itemIds));
         return ok({
           result: `removed ${itemIds.length} item(s) from collection ${collectionId}`,
         });
-      }),
+      })),
     ),
   );
 }

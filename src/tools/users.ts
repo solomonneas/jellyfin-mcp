@@ -2,8 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, fail, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 export function registerUserTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -12,10 +12,8 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
     {},
     READ_ONLY,
     toToolHandler(() =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(fromPromise(() => client.listUsers()));
-        if (result._tag === "Left") return fail(result.left);
-        const users = result.right;
+      toolResult(Effect.gen(function* () {
+        const users = yield* fromPromise(() => client.listUsers());
         return ok(
           users.map((u) => ({
             id: u.Id,
@@ -26,7 +24,7 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
             lastActivity: u.LastActivityDate ?? null,
           })),
         );
-      }),
+      })),
     ),
   );
 
@@ -38,16 +36,14 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
     },
     NON_DESTRUCTIVE,
     toToolHandler(({ name }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(fromPromise(() => client.createUser(name)));
-        if (result._tag === "Left") return fail(result.left);
-        const user = result.right;
+      toolResult(Effect.gen(function* () {
+        const user = yield* fromPromise(() => client.createUser(name));
         return ok({
           id: user.Id,
           name: user.Name,
           note: "Password not set. Use jellyfin_set_user_password to set one.",
         });
-      }),
+      })),
     ),
   );
 
@@ -63,12 +59,11 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
     },
     DESTRUCTIVE,
     toToolHandler(({ userId, confirm }) =>
-      Effect.gen(function* () {
+      toolResult(Effect.gen(function* () {
         if (!confirm) return refuseUnconfirmed(`delete user ${userId}`);
-        const result = yield* Effect.either(fromPromise(() => client.deleteUser(userId)));
-        if (result._tag === "Left") return fail(result.left);
+        yield* fromPromise(() => client.deleteUser(userId));
         return ok({ result: `user ${userId} deleted` });
-      }),
+      })),
     ),
   );
 
@@ -81,15 +76,12 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
     },
     DESTRUCTIVE,
     toToolHandler(({ userId, disabled }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.setUserDisabled(userId, disabled)),
-        );
-        if (result._tag === "Left") return fail(result.left);
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.setUserDisabled(userId, disabled));
         return ok({
           result: `user ${userId} ${disabled ? "disabled" : "enabled"}`,
         });
-      }),
+      })),
     ),
   );
 
@@ -106,14 +98,11 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
     },
     DESTRUCTIVE,
     toToolHandler(({ userId, newPassword, confirm }) =>
-      Effect.gen(function* () {
+      toolResult(Effect.gen(function* () {
         if (!confirm) return refuseUnconfirmed(`change the password for user ${userId}`);
-        const result = yield* Effect.either(
-          fromPromise(() => client.setUserPassword(userId, newPassword)),
-        );
-        if (result._tag === "Left") return fail(result.left);
+        yield* fromPromise(() => client.setUserPassword(userId, newPassword));
         return ok({ result: `password updated for user ${userId}` });
-      }),
+      })),
     ),
   );
 }

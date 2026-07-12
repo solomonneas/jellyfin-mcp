@@ -2,8 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, fail, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 export function registerPlaylistTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -14,10 +14,8 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
     },
     READ_ONLY,
     toToolHandler(({ userId }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(fromPromise(() => client.listPlaylists(userId)));
-        if (result._tag === "Left") return fail(result.left);
-        const payload = result.right;
+      toolResult(Effect.gen(function* () {
+        const payload = yield* fromPromise(() => client.listPlaylists(userId));
         return ok({
           totalCount: payload.TotalRecordCount,
           playlists: payload.Items.map((p) => ({
@@ -25,7 +23,7 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
             name: p.Name,
           })),
         });
-      }),
+      })),
     ),
   );
 
@@ -47,14 +45,12 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
     },
     NON_DESTRUCTIVE,
     toToolHandler(({ name, userId, itemIds, mediaType }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.createPlaylist(name, userId, itemIds, mediaType)),
+      toolResult(Effect.gen(function* () {
+        const created = yield* fromPromise(() =>
+          client.createPlaylist(name, userId, itemIds, mediaType),
         );
-        if (result._tag === "Left") return fail(result.left);
-        const created = result.right;
         return ok({ id: created.Id, name: created.Name ?? name });
-      }),
+      })),
     ),
   );
 
@@ -67,12 +63,8 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
     },
     READ_ONLY,
     toToolHandler(({ playlistId, userId }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.getPlaylistItems(playlistId, userId)),
-        );
-        if (result._tag === "Left") return fail(result.left);
-        const payload = result.right;
+      toolResult(Effect.gen(function* () {
+        const payload = yield* fromPromise(() => client.getPlaylistItems(playlistId, userId));
         return ok({
           totalCount: payload.TotalRecordCount,
           items: payload.Items.map((i) => ({
@@ -83,7 +75,7 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
             seriesName: i.SeriesName ?? null,
           })),
         });
-      }),
+      })),
     ),
   );
 
@@ -97,13 +89,10 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
     },
     NON_DESTRUCTIVE,
     toToolHandler(({ playlistId, itemIds, userId }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.addToPlaylist(playlistId, itemIds, userId)),
-        );
-        if (result._tag === "Left") return fail(result.left);
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.addToPlaylist(playlistId, itemIds, userId));
         return ok({ result: `added ${itemIds.length} item(s) to playlist ${playlistId}` });
-      }),
+      })),
     ),
   );
 
@@ -119,13 +108,10 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
     },
     DESTRUCTIVE,
     toToolHandler(({ playlistId, entryIds }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.removeFromPlaylist(playlistId, entryIds)),
-        );
-        if (result._tag === "Left") return fail(result.left);
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.removeFromPlaylist(playlistId, entryIds));
         return ok({ result: `removed ${entryIds.length} entry/entries from playlist ${playlistId}` });
-      }),
+      })),
     ),
   );
 }

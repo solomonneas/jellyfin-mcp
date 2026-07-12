@@ -2,8 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, fail, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, READ_ONLY } from "./_util.js";
 
 const VALID_ITEM_TYPES = [
   "Movie",
@@ -33,12 +33,8 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
     },
     READ_ONLY,
     toToolHandler(({ query, itemTypes, limit }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.searchItems(query, itemTypes, limit)),
-        );
-        if (result._tag === "Left") return fail(result.left);
-        const results = result.right;
+      toolResult(Effect.gen(function* () {
+        const results = yield* fromPromise(() => client.searchItems(query, itemTypes, limit));
         return ok({
           totalCount: results.TotalRecordCount,
           items: results.Items.map((item) => ({
@@ -49,7 +45,7 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
             productionYear: item.ProductionYear ?? null,
           })),
         });
-      }),
+      })),
     ),
   );
 
@@ -64,12 +60,8 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
     },
     READ_ONLY,
     toToolHandler(({ userId, limit }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.getRecentItems(userId, limit)),
-        );
-        if (result._tag === "Left") return fail(result.left);
-        const items = result.right;
+      toolResult(Effect.gen(function* () {
+        const items = yield* fromPromise(() => client.getRecentItems(userId, limit));
         return ok(
           items.map((item) => ({
             id: item.Id,
@@ -80,7 +72,7 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
             dateCreated: item.DateCreated ?? null,
           })),
         );
-      }),
+      })),
     ),
   );
 
@@ -92,11 +84,10 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
     },
     READ_ONLY,
     toToolHandler(({ itemId }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(fromPromise(() => client.getItem(itemId)));
-        if (result._tag === "Left") return fail(result.left);
-        return ok(result.right);
-      }),
+      toolResult(Effect.gen(function* () {
+        const item = yield* fromPromise(() => client.getItem(itemId));
+        return ok(item);
+      })),
     ),
   );
 }

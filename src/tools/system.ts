@@ -2,8 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, fail, refuseUnconfirmed, DESTRUCTIVE, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, refuseUnconfirmed, DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 export function registerSystemTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -12,10 +12,8 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
     {},
     READ_ONLY,
     toToolHandler(() =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(fromPromise(() => client.getSystemInfo()));
-        if (result._tag === "Left") return fail(result.left);
-        const info = result.right;
+      toolResult(Effect.gen(function* () {
+        const info = yield* fromPromise(() => client.getSystemInfo());
         return ok({
           serverName: info.ServerName,
           version: info.Version,
@@ -26,7 +24,7 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
           hasPendingRestart: info.HasPendingRestart ?? false,
           hasUpdateAvailable: info.HasUpdateAvailable ?? false,
         });
-      }),
+      })),
     ),
   );
 
@@ -41,12 +39,11 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
     },
     DESTRUCTIVE,
     toToolHandler(({ confirm }) =>
-      Effect.gen(function* () {
+      toolResult(Effect.gen(function* () {
         if (!confirm) return refuseUnconfirmed("restart the Jellyfin server");
-        const result = yield* Effect.either(fromPromise(() => client.restart()));
-        if (result._tag === "Left") return fail(result.left);
+        yield* fromPromise(() => client.restart());
         return ok({ result: "restart signal sent" });
-      }),
+      })),
     ),
   );
 
@@ -61,12 +58,11 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
     },
     DESTRUCTIVE,
     toToolHandler(({ confirm }) =>
-      Effect.gen(function* () {
+      toolResult(Effect.gen(function* () {
         if (!confirm) return refuseUnconfirmed("shut down the Jellyfin server");
-        const result = yield* Effect.either(fromPromise(() => client.shutdown()));
-        if (result._tag === "Left") return fail(result.left);
+        yield* fromPromise(() => client.shutdown());
         return ok({ result: "shutdown signal sent" });
-      }),
+      })),
     ),
   );
 }

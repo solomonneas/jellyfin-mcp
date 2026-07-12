@@ -2,8 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, fail, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, READ_ONLY } from "./_util.js";
 
 // 1 tick = 100 nanoseconds. Mirrors the constant in client.ts; kept local so
 // this file doesn't reach into the client module for presentation math.
@@ -28,12 +28,8 @@ export function registerDiscoveryTools(
     },
     READ_ONLY,
     toToolHandler(({ userId, limit }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.getResumeItems(userId, limit)),
-        );
-        if (result._tag === "Left") return fail(result.left);
-        const payload = result.right;
+      toolResult(Effect.gen(function* () {
+        const payload = yield* fromPromise(() => client.getResumeItems(userId, limit));
         return ok({
           totalCount: payload.TotalRecordCount,
           items: payload.Items.map((item) => ({
@@ -49,7 +45,7 @@ export function registerDiscoveryTools(
             playedPercentage: item.UserData?.PlayedPercentage ?? null,
           })),
         });
-      }),
+      })),
     ),
   );
 
@@ -72,12 +68,8 @@ export function registerDiscoveryTools(
     },
     READ_ONLY,
     toToolHandler(({ userId, seriesId, limit }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.getNextUp(userId, limit, seriesId)),
-        );
-        if (result._tag === "Left") return fail(result.left);
-        const payload = result.right;
+      toolResult(Effect.gen(function* () {
+        const payload = yield* fromPromise(() => client.getNextUp(userId, limit, seriesId));
         return ok({
           totalCount: payload.TotalRecordCount,
           items: payload.Items.map((item) => ({
@@ -91,7 +83,7 @@ export function registerDiscoveryTools(
             runtimeSeconds: ticksToSeconds(item.RunTimeTicks),
           })),
         });
-      }),
+      })),
     ),
   );
 
@@ -114,12 +106,8 @@ export function registerDiscoveryTools(
     },
     READ_ONLY,
     toToolHandler(({ itemId, userId, limit }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.getSimilarItems(itemId, userId, limit)),
-        );
-        if (result._tag === "Left") return fail(result.left);
-        const payload = result.right;
+      toolResult(Effect.gen(function* () {
+        const payload = yield* fromPromise(() => client.getSimilarItems(itemId, userId, limit));
         return ok({
           totalCount: payload.TotalRecordCount,
           items: payload.Items.map((item) => ({
@@ -131,7 +119,7 @@ export function registerDiscoveryTools(
             communityRating: item.CommunityRating ?? null,
           })),
         });
-      }),
+      })),
     ),
   );
 }

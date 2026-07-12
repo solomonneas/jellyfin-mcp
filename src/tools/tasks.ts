@@ -2,8 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { fromPromise, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, fail, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 export function registerTaskTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -12,10 +12,8 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
     {},
     READ_ONLY,
     toToolHandler(() =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(fromPromise(() => client.listScheduledTasks()));
-        if (result._tag === "Left") return fail(result.left);
-        const tasks = result.right;
+      toolResult(Effect.gen(function* () {
+        const tasks = yield* fromPromise(() => client.listScheduledTasks());
         return ok(
           tasks.map((t) => ({
             id: t.Id,
@@ -29,7 +27,7 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
             lastError: t.LastExecutionResult?.ErrorMessage ?? null,
           })),
         );
-      }),
+      })),
     ),
   );
 
@@ -41,11 +39,10 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
     },
     NON_DESTRUCTIVE,
     toToolHandler(({ taskId }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(fromPromise(() => client.runScheduledTask(taskId)));
-        if (result._tag === "Left") return fail(result.left);
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.runScheduledTask(taskId));
         return ok({ result: `task ${taskId} started` });
-      }),
+      })),
     ),
   );
 
@@ -61,12 +58,8 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
     },
     READ_ONLY,
     toToolHandler(({ limit, minDate }) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.either(
-          fromPromise(() => client.getActivityLog(limit, minDate)),
-        );
-        if (result._tag === "Left") return fail(result.left);
-        const log = result.right;
+      toolResult(Effect.gen(function* () {
+        const log = yield* fromPromise(() => client.getActivityLog(limit, minDate));
         return ok({
           totalCount: log.TotalRecordCount,
           entries: log.Items.map((e) => ({
@@ -80,7 +73,7 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
             detail: e.Overview ?? null,
           })),
         });
-      }),
+      })),
     ),
   );
 }
