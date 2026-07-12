@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { Effect } from "effect";
 import { JellyfinClient } from "./client.js";
 import { getConfig } from "./config.js";
 import type {
@@ -394,118 +395,153 @@ export interface CliDeps {
   startServer: () => Promise<void>;
 }
 
+// Lift a Promise-returning client call into Effect, keeping the rejection
+// value as the error channel so run() can map it to exit 1 unchanged.
+const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: thunk, catch: (error) => error });
+
 export async function run(argv: string[], deps: CliDeps): Promise<number> {
-  let parsed: Parsed;
-  try {
-    parsed = parseArgs(argv);
-  } catch (error) {
-    deps.err(error instanceof Error ? error.message : String(error));
-    deps.err("");
-    deps.err(HELP);
-    return 2;
-  }
-
-  if (parsed.kind === "help") {
-    deps.out(HELP);
-    return 0;
-  }
-  if (parsed.kind === "version") {
-    deps.out(VERSION);
-    return 0;
-  }
-  if (parsed.kind === "mcp") {
-    await deps.startServer();
-    return 0;
-  }
-
-  try {
-    return await dispatch(parsed, deps);
-  } catch (error) {
-    deps.err(error instanceof Error ? error.message : String(error));
-    return 1;
-  }
+  return Effect.runPromise(runEffect(argv, deps));
 }
+
+const runEffect = (argv: string[], deps: CliDeps): Effect.Effect<number> =>
+  Effect.gen(function* () {
+    const parsedResult = yield* Effect.either(
+      Effect.try({
+        try: () => parseArgs(argv),
+        catch: (error) => error,
+      }),
+    );
+    if (parsedResult._tag === "Left") {
+      const error = parsedResult.left;
+      deps.err(error instanceof Error ? error.message : String(error));
+      deps.err("");
+      deps.err(HELP);
+      return 2;
+    }
+    const parsed = parsedResult.right;
+
+    if (parsed.kind === "help") {
+      deps.out(HELP);
+      return 0;
+    }
+    if (parsed.kind === "version") {
+      deps.out(VERSION);
+      return 0;
+    }
+    if (parsed.kind === "mcp") {
+      // Failures here reject run()'s Promise (same as the prior await path).
+      yield* Effect.promise(() => deps.startServer());
+      return 0;
+    }
+
+    const dispatched = yield* Effect.either(dispatch(parsed, deps));
+    if (dispatched._tag === "Left") {
+      const error = dispatched.left;
+      deps.err(error instanceof Error ? error.message : String(error));
+      return 1;
+    }
+    return dispatched.right;
+  });
 
 type DispatchKind = Exclude<Parsed["kind"], "help" | "version" | "mcp">;
 
-async function dispatch(parsed: Extract<Parsed, { kind: DispatchKind }>, deps: CliDeps): Promise<number> {
-  const client = deps.makeClient();
-  const emit = (raw: unknown, render: () => string, json: boolean): number => {
-    deps.out(json ? JSON.stringify(raw, null, 2) : render());
-    return 0;
-  };
+function dispatch(
+  parsed: Extract<Parsed, { kind: DispatchKind }>,
+  deps: CliDeps,
+): Effect.Effect<number, unknown> {
+  return Effect.gen(function* () {
+    const client = deps.makeClient();
+    const emit = (raw: unknown, render: () => string, json: boolean): number => {
+      deps.out(json ? JSON.stringify(raw, null, 2) : render());
+      return 0;
+    };
 
-  switch (parsed.kind) {
-    case "status": {
-      const r = await client.getSystemInfo();
-      // A reachable Jellyfin always returns a version. Treat a missing/blank
-      // version as "not ok" so `status` exits 1 for health-check use.
-      const ok = typeof r.Version === "string" && r.Version.length > 0;
-      deps.out(parsed.json ? JSON.stringify(r, null, 2) : renderStatus(r));
-      return ok ? 0 : 1;
+    switch (parsed.kind) {
+      case "status": {
+        const r = yield* fromPromise(() => client.getSystemInfo());
+        // A reachable Jellyfin always returns a version. Treat a missing/blank
+        // version as "not ok" so `status` exits 1 for health-check use.
+        const ok = typeof r.Version === "string" && r.Version.length > 0;
+        deps.out(parsed.json ? JSON.stringify(r, null, 2) : renderStatus(r));
+        return ok ? 0 : 1;
+      }
+      case "libraries": {
+        const r = yield* fromPromise(() => client.listLibraries());
+        return emit(r, () => renderLibraries(r), parsed.json);
+      }
+      case "users": {
+        const r = yield* fromPromise(() => client.listUsers());
+        return emit(r, () => renderUsers(r), parsed.json);
+      }
+      case "sessions": {
+        const all = yield* fromPromise(() => client.listSessions());
+        const r = parsed.activeOnly ? all.filter((s) => s.NowPlayingItem) : all;
+        return emit(r, () => renderSessions(r), parsed.json);
+      }
+      case "search": {
+        const r = yield* fromPromise(() =>
+          client.searchItems(parsed.query, parsed.types, parsed.limit),
+        );
+        return emit(r, () => renderItemRows(r.Items, r.TotalRecordCount), parsed.json);
+      }
+      case "item": {
+        const r = yield* fromPromise(() => client.getItem(parsed.itemId));
+        return emit(r, () => renderItemRows([r], undefined), parsed.json);
+      }
+      case "recent": {
+        const r = yield* fromPromise(() => client.getRecentItems(parsed.userId, parsed.limit));
+        return emit(r, () => renderItemRows(r, undefined), parsed.json);
+      }
+      case "resume": {
+        const r = yield* fromPromise(() => client.getResumeItems(parsed.userId, parsed.limit));
+        return emit(r, () => renderResume(r), parsed.json);
+      }
+      case "next-up": {
+        const r = yield* fromPromise(() =>
+          client.getNextUp(parsed.userId, parsed.limit, parsed.seriesId),
+        );
+        return emit(r, () => renderItemRows(r.Items, r.TotalRecordCount), parsed.json);
+      }
+      case "similar": {
+        const r = yield* fromPromise(() =>
+          client.getSimilarItems(parsed.itemId, parsed.userId, parsed.limit),
+        );
+        return emit(r, () => renderItemRows(r.Items, r.TotalRecordCount), parsed.json);
+      }
+      case "history": {
+        const r = yield* fromPromise(() =>
+          client.getWatchHistory(parsed.userId, parsed.limit, 0, parsed.types),
+        );
+        return emit(r, () => renderItemRows(r.Items, r.TotalRecordCount), parsed.json);
+      }
+      case "user-data": {
+        const raw = yield* fromPromise(() =>
+          client.getItemUserData(parsed.userId, parsed.itemId),
+        );
+        const r = raw ?? {};
+        return emit(r, () => renderUserData(r), parsed.json);
+      }
+      case "activity": {
+        const r = yield* fromPromise(() => client.getActivityLog(parsed.limit, parsed.minDate));
+        return emit(r, () => renderActivity(r), parsed.json);
+      }
+      case "tasks": {
+        const r = yield* fromPromise(() => client.listScheduledTasks());
+        return emit(r, () => renderTasks(r), parsed.json);
+      }
+      case "playlists": {
+        const r = yield* fromPromise(() => client.listPlaylists(parsed.userId));
+        return emit(r, () => renderPlaylists(r), parsed.json);
+      }
+      case "playlist": {
+        const r = yield* fromPromise(() =>
+          client.getPlaylistItems(parsed.playlistId, parsed.userId),
+        );
+        return emit(r, () => renderPlaylistItems(r), parsed.json);
+      }
     }
-    case "libraries": {
-      const r = await client.listLibraries();
-      return emit(r, () => renderLibraries(r), parsed.json);
-    }
-    case "users": {
-      const r = await client.listUsers();
-      return emit(r, () => renderUsers(r), parsed.json);
-    }
-    case "sessions": {
-      const all = await client.listSessions();
-      const r = parsed.activeOnly ? all.filter((s) => s.NowPlayingItem) : all;
-      return emit(r, () => renderSessions(r), parsed.json);
-    }
-    case "search": {
-      const r = await client.searchItems(parsed.query, parsed.types, parsed.limit);
-      return emit(r, () => renderItemRows(r.Items, r.TotalRecordCount), parsed.json);
-    }
-    case "item": {
-      const r = await client.getItem(parsed.itemId);
-      return emit(r, () => renderItemRows([r], undefined), parsed.json);
-    }
-    case "recent": {
-      const r = await client.getRecentItems(parsed.userId, parsed.limit);
-      return emit(r, () => renderItemRows(r, undefined), parsed.json);
-    }
-    case "resume": {
-      const r = await client.getResumeItems(parsed.userId, parsed.limit);
-      return emit(r, () => renderResume(r), parsed.json);
-    }
-    case "next-up": {
-      const r = await client.getNextUp(parsed.userId, parsed.limit, parsed.seriesId);
-      return emit(r, () => renderItemRows(r.Items, r.TotalRecordCount), parsed.json);
-    }
-    case "similar": {
-      const r = await client.getSimilarItems(parsed.itemId, parsed.userId, parsed.limit);
-      return emit(r, () => renderItemRows(r.Items, r.TotalRecordCount), parsed.json);
-    }
-    case "history": {
-      const r = await client.getWatchHistory(parsed.userId, parsed.limit, 0, parsed.types);
-      return emit(r, () => renderItemRows(r.Items, r.TotalRecordCount), parsed.json);
-    }
-    case "user-data": {
-      const r = (await client.getItemUserData(parsed.userId, parsed.itemId)) ?? {};
-      return emit(r, () => renderUserData(r), parsed.json);
-    }
-    case "activity": {
-      const r = await client.getActivityLog(parsed.limit, parsed.minDate);
-      return emit(r, () => renderActivity(r), parsed.json);
-    }
-    case "tasks": {
-      const r = await client.listScheduledTasks();
-      return emit(r, () => renderTasks(r), parsed.json);
-    }
-    case "playlists": {
-      const r = await client.listPlaylists(parsed.userId);
-      return emit(r, () => renderPlaylists(r), parsed.json);
-    }
-    case "playlist": {
-      const r = await client.getPlaylistItems(parsed.playlistId, parsed.userId);
-      return emit(r, () => renderPlaylistItems(r), parsed.json);
-    }
-  }
+  });
 }
 
 // True when this module is the process entrypoint. process.argv[1] is often a
