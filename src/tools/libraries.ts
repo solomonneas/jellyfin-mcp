@@ -1,7 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { ok, fail, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 export function registerLibraryTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -9,9 +11,9 @@ export function registerLibraryTools(server: McpServer, client: JellyfinClient):
     "List all Jellyfin libraries (virtual folders) with their name, ID, collection type (movies/tvshows/music/...), and filesystem paths.",
     {},
     READ_ONLY,
-    async () => {
-      try {
-        const libs = await client.listLibraries();
+    toToolHandler(() =>
+      toolResult(Effect.gen(function* () {
+        const libs = yield* fromPromise(() => client.listLibraries());
         return ok(
           libs.map((lib) => ({
             id: lib.ItemId,
@@ -20,10 +22,8 @@ export function registerLibraryTools(server: McpServer, client: JellyfinClient):
             locations: lib.Locations,
           })),
         );
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -36,17 +36,15 @@ export function registerLibraryTools(server: McpServer, client: JellyfinClient):
         .describe("Library ID from jellyfin_list_libraries. Omit to scan all libraries."),
     },
     NON_DESTRUCTIVE,
-    async ({ libraryId }) => {
-      try {
-        await client.scanLibraries(libraryId);
+    toToolHandler(({ libraryId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.scanLibraries(libraryId));
         return ok({
           result: libraryId
             ? `scan triggered for library ${libraryId}`
             : "scan triggered for all libraries",
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 }

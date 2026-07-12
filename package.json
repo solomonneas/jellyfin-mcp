@@ -10,7 +10,7 @@
     "jellyctl": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc -p tsconfig.build.json",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/cli.js mcp",
     "test": "vitest run",
@@ -44,7 +44,9 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@effect/platform": "^0.96.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "effect": "^3.21.4",
     "undici": "^7.27.2",
     "zod": "^4.3.6"
   },
@@ -52,7 +54,7 @@
     "@types/node": "^25.6.0",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.5"
   },
   "files": [

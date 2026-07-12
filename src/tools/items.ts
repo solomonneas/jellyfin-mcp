@@ -1,7 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { ok, fail, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, READ_ONLY } from "./_util.js";
 
 const VALID_ITEM_TYPES = [
   "Movie",
@@ -30,9 +32,9 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
       limit: z.number().int().positive().max(200).optional().default(20),
     },
     READ_ONLY,
-    async ({ query, itemTypes, limit }) => {
-      try {
-        const results = await client.searchItems(query, itemTypes, limit);
+    toToolHandler(({ query, itemTypes, limit }) =>
+      toolResult(Effect.gen(function* () {
+        const results = yield* fromPromise(() => client.searchItems(query, itemTypes, limit));
         return ok({
           totalCount: results.TotalRecordCount,
           items: results.Items.map((item) => ({
@@ -43,10 +45,8 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
             productionYear: item.ProductionYear ?? null,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -59,9 +59,9 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
       limit: z.number().int().positive().max(100).optional().default(20),
     },
     READ_ONLY,
-    async ({ userId, limit }) => {
-      try {
-        const items = await client.getRecentItems(userId, limit);
+    toToolHandler(({ userId, limit }) =>
+      toolResult(Effect.gen(function* () {
+        const items = yield* fromPromise(() => client.getRecentItems(userId, limit));
         return ok(
           items.map((item) => ({
             id: item.Id,
@@ -72,10 +72,8 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
             dateCreated: item.DateCreated ?? null,
           })),
         );
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -85,13 +83,11 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
       itemId: z.string().describe("Item ID from a search or recent-items result"),
     },
     READ_ONLY,
-    async ({ itemId }) => {
-      try {
-        const item = await client.getItem(itemId);
+    toToolHandler(({ itemId }) =>
+      toolResult(Effect.gen(function* () {
+        const item = yield* fromPromise(() => client.getItem(itemId));
         return ok(item);
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 }

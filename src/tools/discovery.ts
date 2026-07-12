@@ -1,7 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { ok, fail, READ_ONLY } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, READ_ONLY } from "./_util.js";
 
 // 1 tick = 100 nanoseconds. Mirrors the constant in client.ts; kept local so
 // this file doesn't reach into the client module for presentation math.
@@ -25,12 +27,12 @@ export function registerDiscoveryTools(
       limit: z.number().int().positive().max(100).optional().default(20),
     },
     READ_ONLY,
-    async ({ userId, limit }) => {
-      try {
-        const result = await client.getResumeItems(userId, limit);
+    toToolHandler(({ userId, limit }) =>
+      toolResult(Effect.gen(function* () {
+        const payload = yield* fromPromise(() => client.getResumeItems(userId, limit));
         return ok({
-          totalCount: result.TotalRecordCount,
-          items: result.Items.map((item) => ({
+          totalCount: payload.TotalRecordCount,
+          items: payload.Items.map((item) => ({
             id: item.Id,
             name: item.Name,
             type: item.Type,
@@ -43,10 +45,8 @@ export function registerDiscoveryTools(
             playedPercentage: item.UserData?.PlayedPercentage ?? null,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -67,12 +67,12 @@ export function registerDiscoveryTools(
       limit: z.number().int().positive().max(100).optional().default(20),
     },
     READ_ONLY,
-    async ({ userId, seriesId, limit }) => {
-      try {
-        const result = await client.getNextUp(userId, limit, seriesId);
+    toToolHandler(({ userId, seriesId, limit }) =>
+      toolResult(Effect.gen(function* () {
+        const payload = yield* fromPromise(() => client.getNextUp(userId, limit, seriesId));
         return ok({
-          totalCount: result.TotalRecordCount,
-          items: result.Items.map((item) => ({
+          totalCount: payload.TotalRecordCount,
+          items: payload.Items.map((item) => ({
             id: item.Id,
             name: item.Name,
             type: item.Type,
@@ -83,10 +83,8 @@ export function registerDiscoveryTools(
             runtimeSeconds: ticksToSeconds(item.RunTimeTicks),
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -107,12 +105,12 @@ export function registerDiscoveryTools(
       limit: z.number().int().positive().max(100).optional().default(20),
     },
     READ_ONLY,
-    async ({ itemId, userId, limit }) => {
-      try {
-        const result = await client.getSimilarItems(itemId, userId, limit);
+    toToolHandler(({ itemId, userId, limit }) =>
+      toolResult(Effect.gen(function* () {
+        const payload = yield* fromPromise(() => client.getSimilarItems(itemId, userId, limit));
         return ok({
-          totalCount: result.TotalRecordCount,
-          items: result.Items.map((item) => ({
+          totalCount: payload.TotalRecordCount,
+          items: payload.Items.map((item) => ({
             id: item.Id,
             name: item.Name,
             type: item.Type,
@@ -121,9 +119,7 @@ export function registerDiscoveryTools(
             communityRating: item.CommunityRating ?? null,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 }

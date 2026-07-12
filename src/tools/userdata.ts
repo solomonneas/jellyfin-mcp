@@ -1,8 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
 import type { Item, UserItemData } from "../types.js";
-import { ok, fail, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+import { ok, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 const TICKS_PER_SECOND = 10_000_000;
 const ticksToSeconds = (ticks: number | undefined | null): number | null =>
@@ -111,89 +113,97 @@ function matchesFilters(item: Item, filters: ContinueWatchingFilters): boolean {
   return true;
 }
 
-async function getAllResumeItems(
+function getAllResumeItems(
   client: JellyfinClient,
   userId: string,
   pageSize: number,
-): Promise<{ totalResumeCount: number; items: Item[] }> {
-  let totalResumeCount: number | null = null;
-  let startIndex = 0;
-  const items: Item[] = [];
+): Effect.Effect<{ totalResumeCount: number; items: Item[] }, unknown, never> {
+  return Effect.gen(function* () {
+    let totalResumeCount: number | null = null;
+    let startIndex = 0;
+    const items: Item[] = [];
 
-  while (totalResumeCount === null || startIndex < totalResumeCount) {
-    const resume = await client.getResumeItems(userId, pageSize, startIndex);
-    totalResumeCount = resume.TotalRecordCount;
-    items.push(...resume.Items);
-    if (resume.Items.length === 0) break;
-    startIndex += resume.Items.length;
-  }
+    while (totalResumeCount === null || startIndex < totalResumeCount) {
+      const resume = yield* fromPromise(() => client.getResumeItems(userId, pageSize, startIndex));
+      totalResumeCount = resume.TotalRecordCount;
+      items.push(...resume.Items);
+      if (resume.Items.length === 0) break;
+      startIndex += resume.Items.length;
+    }
 
-  return { totalResumeCount: totalResumeCount ?? 0, items };
+    return { totalResumeCount: totalResumeCount ?? 0, items };
+  });
 }
 
-async function hydrateExplicitItems(
+function hydrateExplicitItems(
   client: JellyfinClient,
   userId: string,
   itemIds: string[],
-): Promise<{ items: Item[]; failed: { item: Item; error: string }[] }> {
-  const items: Item[] = [];
-  const failed: { item: Item; error: string }[] = [];
-  for (const itemId of uniqueIds(itemIds)) {
-    try {
-      const [item, userData] = await Promise.all([
-        client.getItem(itemId),
-        client.getItemUserData(userId, itemId),
-      ]);
-      items.push({ ...item, UserData: userData ?? item.UserData });
-    } catch (error) {
-      failed.push({ item: placeholderItem(itemId), error: errorMessage(error) });
+): Effect.Effect<{ items: Item[]; failed: { item: Item; error: string }[] }, never, never> {
+  return Effect.promise(async () => {
+    const items: Item[] = [];
+    const failed: { item: Item; error: string }[] = [];
+    for (const itemId of uniqueIds(itemIds)) {
+      try {
+        const [item, userData] = await Promise.all([
+          client.getItem(itemId),
+          client.getItemUserData(userId, itemId),
+        ]);
+        items.push({ ...item, UserData: userData ?? item.UserData });
+      } catch (error) {
+        failed.push({ item: placeholderItem(itemId), error: errorMessage(error) });
+      }
     }
-  }
-  return { items, failed };
+    return { items, failed };
+  });
 }
 
-async function selectContinueWatchingItems(
+function selectContinueWatchingItems(
   client: JellyfinClient,
   userId: string,
   pageSize: number,
   itemIds: string[] | undefined,
   filters: ContinueWatchingFilters,
-): Promise<ItemSelection> {
-  if (itemIds?.length) {
-    const hydrated = await hydrateExplicitItems(client, userId, itemIds);
-    return {
-      totalResumeCount: null,
-      items: hydrated.items.filter((item) => matchesFilters(item, filters)),
-      failed: hydrated.failed,
-    };
-  }
+): Effect.Effect<ItemSelection, unknown, never> {
+  return Effect.gen(function* () {
+    if (itemIds?.length) {
+      const hydrated = yield* hydrateExplicitItems(client, userId, itemIds);
+      return {
+        totalResumeCount: null,
+        items: hydrated.items.filter((item) => matchesFilters(item, filters)),
+        failed: hydrated.failed,
+      };
+    }
 
-  const resume = await getAllResumeItems(client, userId, pageSize);
-  return {
-    totalResumeCount: resume.totalResumeCount,
-    items: resume.items.filter((item) => matchesFilters(item, filters)),
-    failed: [],
-  };
+    const resume = yield* getAllResumeItems(client, userId, pageSize);
+    return {
+      totalResumeCount: resume.totalResumeCount,
+      items: resume.items.filter((item) => matchesFilters(item, filters)),
+      failed: [],
+    };
+  });
 }
 
-async function clearItems(
+function clearItems(
   client: JellyfinClient,
   userId: string,
   items: Item[],
-): Promise<ClearResult> {
-  const results = await Promise.all(items.map(async (item) => {
-    try {
-      await client.clearPlaybackPosition(userId, item.Id, item.UserData);
-      return { cleared: item };
-    } catch (error) {
-      return { failed: { item, error: errorMessage(error) } };
-    }
-  }));
+): Effect.Effect<ClearResult, never, never> {
+  return Effect.promise(async () => {
+    const results = await Promise.all(items.map(async (item) => {
+      try {
+        await client.clearPlaybackPosition(userId, item.Id, item.UserData);
+        return { cleared: item };
+      } catch (error) {
+        return { failed: { item, error: errorMessage(error) } };
+      }
+    }));
 
-  return {
-    cleared: results.flatMap((result) => (result.cleared ? [result.cleared] : [])),
-    failed: results.flatMap((result) => (result.failed ? [result.failed] : [])),
-  };
+    return {
+      cleared: results.flatMap((result) => (result.cleared ? [result.cleared] : [])),
+      failed: results.flatMap((result) => (result.failed ? [result.failed] : [])),
+    };
+  });
 }
 
 function clearResultPayload(
@@ -286,9 +296,9 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       ...filterSchema,
     },
     READ_ONLY,
-    async ({ userId, itemIds, pageSize, ...filters }) => {
-      try {
-        const selection = await selectContinueWatchingItems(
+    toToolHandler(({ userId, itemIds, pageSize, ...filters }) =>
+      toolResult(Effect.gen(function* () {
+        const selection = yield* selectContinueWatchingItems(
           client,
           userId,
           pageSize,
@@ -306,10 +316,8 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
             error: failure.error,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -341,29 +349,27 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
         .describe("Must be true to proceed because this changes user playback progress."),
     },
     DESTRUCTIVE,
-    async ({ userId, itemIds, pageSize, confirm, ...filters }) => {
-      if (!confirm) {
-        return refuseUnconfirmed(
-          `clear Continue Watching playback positions for user ${userId}`,
-        );
-      }
+    toToolHandler(({ userId, itemIds, pageSize, confirm, ...filters }) =>
+      toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed(
+            `clear Continue Watching playback positions for user ${userId}`,
+          );
+        }
 
-      try {
-        const selection = await selectContinueWatchingItems(
+        const selection = yield* selectContinueWatchingItems(
           client,
           userId,
           pageSize,
           itemIds,
           readFilters(filters),
         );
-        const result = await clearItems(client, userId, selection.items);
+        const result = yield* clearItems(client, userId, selection.items);
         result.failed.push(...selection.failed);
         const payload = clearResultPayload(userId, selection.totalResumeCount, result);
         return result.failed.length > 0 ? resultWithPartialFailure(payload) : ok(payload);
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -376,29 +382,27 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       confirm: z.boolean().optional().describe("Must be true to proceed."),
     },
     DESTRUCTIVE,
-    async ({ userId, seriesId, pageSize, confirm }) => {
-      if (!confirm) {
-        return refuseUnconfirmed(
-          `clear Continue Watching entries for series ${seriesId} and user ${userId}`,
-        );
-      }
+    toToolHandler(({ userId, seriesId, pageSize, confirm }) =>
+      toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed(
+            `clear Continue Watching entries for series ${seriesId} and user ${userId}`,
+          );
+        }
 
-      try {
-        const selection = await selectContinueWatchingItems(
+        const selection = yield* selectContinueWatchingItems(
           client,
           userId,
           pageSize,
           undefined,
           { seriesId, itemTypes: ["Episode"] },
         );
-        const result = await clearItems(client, userId, selection.items);
+        const result = yield* clearItems(client, userId, selection.items);
         result.failed.push(...selection.failed);
         const payload = clearResultPayload(userId, selection.totalResumeCount, result);
         return result.failed.length > 0 ? resultWithPartialFailure(payload) : ok(payload);
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -416,15 +420,15 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       confirm: z.boolean().optional().describe("Must be true to proceed."),
     },
     DESTRUCTIVE,
-    async ({ userId, seriesId, keepBy, pageSize, confirm }) => {
-      if (!confirm) {
-        return refuseUnconfirmed(
-          `clear older episode resume entries for series ${seriesId} and user ${userId}`,
-        );
-      }
+    toToolHandler(({ userId, seriesId, keepBy, pageSize, confirm }) =>
+      toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed(
+            `clear older episode resume entries for series ${seriesId} and user ${userId}`,
+          );
+        }
 
-      try {
-        const selection = await selectContinueWatchingItems(
+        const selection = yield* selectContinueWatchingItems(
           client,
           userId,
           pageSize,
@@ -438,17 +442,15 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
         );
         const kept = sorted[0] ?? null;
         const toClear = kept ? sorted.slice(1) : [];
-        const result = await clearItems(client, userId, toClear);
+        const result = yield* clearItems(client, userId, toClear);
         result.failed.push(...selection.failed);
         const payload = {
           ...clearResultPayload(userId, selection.totalResumeCount, result),
           keptItem: kept ? itemSummary(kept) : null,
         };
         return result.failed.length > 0 ? resultWithPartialFailure(payload) : ok(payload);
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -463,23 +465,21 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       startIndex: z.number().int().nonnegative().optional().default(0),
     },
     READ_ONLY,
-    async ({ userId, itemTypes, limit, startIndex }) => {
-      try {
-        const result = await client.getWatchHistory(
+    toToolHandler(({ userId, itemTypes, limit, startIndex }) =>
+      toolResult(Effect.gen(function* () {
+        const result = yield* fromPromise(() => client.getWatchHistory(
           userId,
           limit,
           startIndex,
           itemTypes?.join(","),
-        );
+        ));
         return ok({
           totalCount: result.TotalRecordCount,
           startIndex: result.StartIndex ?? startIndex,
           items: result.Items.map(itemSummary),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -490,14 +490,12 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       itemId: z.string().trim().min(1).describe("Item ID to inspect."),
     },
     READ_ONLY,
-    async ({ userId, itemId }) => {
-      try {
-        const userData = await client.getItemUserData(userId, itemId);
+    toToolHandler(({ userId, itemId }) =>
+      toolResult(Effect.gen(function* () {
+        const userData = yield* fromPromise(() => client.getItemUserData(userId, itemId));
         return ok(userData ?? {});
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -510,32 +508,30 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       confirm: z.boolean().optional().describe("Must be true to proceed because this changes user playback progress."),
     },
     DESTRUCTIVE,
-    async ({ userId, itemId, positionSec, confirm }) => {
-      if (!confirm) {
-        return refuseUnconfirmed(
-          `set resume position for item ${itemId} and user ${userId}`,
-        );
-      }
+    toToolHandler(({ userId, itemId, positionSec, confirm }) =>
+      toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed(
+            `set resume position for item ${itemId} and user ${userId}`,
+          );
+        }
 
-      try {
-        const item = await client.getItem(itemId);
-        const updated = await client.setPlaybackPosition(
+        const item = yield* fromPromise(() => client.getItem(itemId));
+        const updated = yield* fromPromise(() => client.setPlaybackPosition(
           userId,
           itemId,
           positionSec,
           undefined,
           item.RunTimeTicks,
-        );
+        ));
         return ok({
           userId,
           item: itemSummary({ ...item, UserData: updated ?? item.UserData }),
           requestedPositionSeconds: positionSec,
           positionSeconds: ticksToSeconds(updated?.PlaybackPositionTicks) ?? positionSec,
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -546,14 +542,12 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       itemId: z.string().describe("Item ID from a search or recent-items result"),
     },
     NON_DESTRUCTIVE,
-    async ({ userId, itemId }) => {
-      try {
-        await client.markPlayed(userId, itemId);
+    toToolHandler(({ userId, itemId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.markPlayed(userId, itemId));
         return ok({ result: `item ${itemId} marked played for user ${userId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -564,14 +558,12 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       itemId: z.string().describe("Item ID from a search or recent-items result"),
     },
     NON_DESTRUCTIVE,
-    async ({ userId, itemId }) => {
-      try {
-        await client.markUnplayed(userId, itemId);
+    toToolHandler(({ userId, itemId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.markUnplayed(userId, itemId));
         return ok({ result: `item ${itemId} marked unplayed for user ${userId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -582,14 +574,12 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       itemId: z.string().describe("Item ID from a search or recent-items result"),
     },
     NON_DESTRUCTIVE,
-    async ({ userId, itemId }) => {
-      try {
-        await client.setFavorite(userId, itemId);
+    toToolHandler(({ userId, itemId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.setFavorite(userId, itemId));
         return ok({ result: `item ${itemId} favorited for user ${userId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -600,13 +590,11 @@ export function registerUserDataTools(server: McpServer, client: JellyfinClient)
       itemId: z.string().describe("Item ID from a search or recent-items result"),
     },
     NON_DESTRUCTIVE,
-    async ({ userId, itemId }) => {
-      try {
-        await client.unsetFavorite(userId, itemId);
+    toToolHandler(({ userId, itemId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.unsetFavorite(userId, itemId));
         return ok({ result: `item ${itemId} unfavorited for user ${userId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 }

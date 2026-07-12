@@ -1,7 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
-import { ok, fail, DESTRUCTIVE, NON_DESTRUCTIVE } from "./_util.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
+import { ok, DESTRUCTIVE, NON_DESTRUCTIVE } from "./_util.js";
 
 export function registerCollectionTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -16,14 +18,12 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
         .describe("Optional initial item IDs"),
     },
     NON_DESTRUCTIVE,
-    async ({ name, itemIds }) => {
-      try {
-        const result = await client.createCollection(name, itemIds);
-        return ok({ id: result.Id, name });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+    toToolHandler(({ name, itemIds }) =>
+      toolResult(Effect.gen(function* () {
+        const collection = yield* fromPromise(() => client.createCollection(name, itemIds));
+        return ok({ id: collection.Id, name });
+      })),
+    ),
   );
 
   server.tool(
@@ -34,14 +34,12 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
       itemIds: z.array(z.string().min(1)).min(1).describe("Item IDs to add"),
     },
     NON_DESTRUCTIVE,
-    async ({ collectionId, itemIds }) => {
-      try {
-        await client.addToCollection(collectionId, itemIds);
+    toToolHandler(({ collectionId, itemIds }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.addToCollection(collectionId, itemIds));
         return ok({ result: `added ${itemIds.length} item(s) to collection ${collectionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -52,15 +50,13 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
       itemIds: z.array(z.string().min(1)).min(1).describe("Item IDs to remove"),
     },
     DESTRUCTIVE,
-    async ({ collectionId, itemIds }) => {
-      try {
-        await client.removeFromCollection(collectionId, itemIds);
+    toToolHandler(({ collectionId, itemIds }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.removeFromCollection(collectionId, itemIds));
         return ok({
           result: `removed ${itemIds.length} item(s) from collection ${collectionId}`,
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 }

@@ -1,8 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
 import type { Session } from "../types.js";
-import { ok, fail, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+import { ok, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 // 1 tick = 100 nanoseconds. 10_000 ticks per millisecond.
 const TICKS_PER_MS = 10_000;
@@ -68,21 +70,26 @@ function resultWithPartialFailure(payload: Record<string, unknown>) {
   return ok(payload);
 }
 
-async function runForSessions(
+function runForSessions(
   sessions: Session[],
   action: (session: Session) => Promise<void>,
-): Promise<{ session: Session; error: string }[]> {
-  const results = await Promise.all(
-    sessions.map(async (session) => {
-      try {
-        await action(session);
-        return null;
-      } catch (error) {
-        return { session, error: errorMessage(error) };
-      }
-    }),
+): Effect.Effect<{ session: Session; error: string }[], never, never> {
+  return Effect.promise(() =>
+    Promise.all(
+      sessions.map(async (session) => {
+        try {
+          await action(session);
+          return null;
+        } catch (error) {
+          return { session, error: errorMessage(error) };
+        }
+      }),
+    ),
+  ).pipe(
+    Effect.map((results) =>
+      results.filter((result): result is { session: Session; error: string } => result !== null),
+    ),
   );
-  return results.filter((result): result is { session: Session; error: string } => result !== null);
 }
 
 export function registerSessionTools(server: McpServer, client: JellyfinClient): void {
@@ -97,9 +104,9 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
         .describe("If true, only return sessions with a NowPlayingItem"),
     },
     READ_ONLY,
-    async ({ activeOnly }) => {
-      try {
-        const sessions = await client.listSessions();
+    toToolHandler(({ activeOnly }) =>
+      toolResult(Effect.gen(function* () {
+        const sessions = yield* fromPromise(() => client.listSessions());
         const filtered = activeOnly
           ? sessions.filter((s) => s.NowPlayingItem)
           : sessions;
@@ -134,10 +141,8 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
             };
           }),
         );
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -147,14 +152,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       sessionId: z.string().describe("Session ID from jellyfin_list_sessions"),
     },
     NON_DESTRUCTIVE,
-    async ({ sessionId }) => {
-      try {
-        await client.pauseSession(sessionId);
+    toToolHandler(({ sessionId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.pauseSession(sessionId));
         return ok({ result: `paused session ${sessionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -164,14 +167,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       sessionId: z.string().describe("Session ID from jellyfin_list_sessions"),
     },
     NON_DESTRUCTIVE,
-    async ({ sessionId }) => {
-      try {
-        await client.resumeSession(sessionId);
+    toToolHandler(({ sessionId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.resumeSession(sessionId));
         return ok({ result: `resumed session ${sessionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -181,14 +182,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       sessionId: z.string().describe("Session ID from jellyfin_list_sessions"),
     },
     DESTRUCTIVE,
-    async ({ sessionId }) => {
-      try {
-        await client.stopSession(sessionId);
+    toToolHandler(({ sessionId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.stopSession(sessionId));
         return ok({ result: `stopped session ${sessionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -207,14 +206,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
         .describe("How long the message stays on screen (milliseconds)"),
     },
     NON_DESTRUCTIVE,
-    async ({ sessionId, text, header, timeoutMs }) => {
-      try {
-        await client.sendMessage(sessionId, text, header, timeoutMs);
+    toToolHandler(({ sessionId, text, header, timeoutMs }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.sendMessage(sessionId, text, header, timeoutMs));
         return ok({ result: `message sent to session ${sessionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -225,14 +222,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       positionSec: z.number().nonnegative().describe("Target position in seconds from start"),
     },
     NON_DESTRUCTIVE,
-    async ({ sessionId, positionSec }) => {
-      try {
-        await client.seekSession(sessionId, positionSec);
+    toToolHandler(({ sessionId, positionSec }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.seekSession(sessionId, positionSec));
         return ok({ result: `seeked session ${sessionId} to ${positionSec}s` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -240,14 +235,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
     "Advance to the next track/episode in the session's queue.",
     { sessionId: z.string().describe("Session ID from jellyfin_list_sessions") },
     NON_DESTRUCTIVE,
-    async ({ sessionId }) => {
-      try {
-        await client.nextTrack(sessionId);
+    toToolHandler(({ sessionId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.nextTrack(sessionId));
         return ok({ result: `next track on session ${sessionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -255,14 +248,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
     "Go back to the previous track/episode in the session's queue.",
     { sessionId: z.string().describe("Session ID from jellyfin_list_sessions") },
     NON_DESTRUCTIVE,
-    async ({ sessionId }) => {
-      try {
-        await client.previousTrack(sessionId);
+    toToolHandler(({ sessionId }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.previousTrack(sessionId));
         return ok({ result: `previous track on session ${sessionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -273,14 +264,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       volume: z.number().int().min(0).max(100).describe("Volume level 0-100"),
     },
     NON_DESTRUCTIVE,
-    async ({ sessionId, volume }) => {
-      try {
-        await client.sendVolume(sessionId, volume);
+    toToolHandler(({ sessionId, volume }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.sendVolume(sessionId, volume));
         return ok({ result: `volume on session ${sessionId} set to ${volume}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -291,15 +280,13 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       action: z.enum(["mute", "unmute", "toggle"]).describe("Mute action to send"),
     },
     NON_DESTRUCTIVE,
-    async ({ sessionId, action }) => {
-      try {
+    toToolHandler(({ sessionId, action }) =>
+      toolResult(Effect.gen(function* () {
         const cmd = action === "mute" ? "Mute" : action === "unmute" ? "Unmute" : "ToggleMute";
-        await client.sendMuteCommand(sessionId, cmd);
+        yield* fromPromise(() => client.sendMuteCommand(sessionId, cmd));
         return ok({ result: `${action} sent to session ${sessionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -310,14 +297,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       index: z.number().int().min(0).describe("Audio stream index"),
     },
     NON_DESTRUCTIVE,
-    async ({ sessionId, index }) => {
-      try {
-        await client.setAudioStream(sessionId, index);
+    toToolHandler(({ sessionId, index }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.setAudioStream(sessionId, index));
         return ok({ result: `audio stream set to index ${index} on session ${sessionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -328,14 +313,12 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       index: z.number().int().min(-1).describe("Subtitle stream index (-1 to disable)"),
     },
     NON_DESTRUCTIVE,
-    async ({ sessionId, index }) => {
-      try {
-        await client.setSubtitleStream(sessionId, index);
+    toToolHandler(({ sessionId, index }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() => client.setSubtitleStream(sessionId, index));
         return ok({ result: `subtitle stream set to index ${index} on session ${sessionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -355,16 +338,16 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
         .describe("Optional start offset in seconds (only meaningful with PlayNow)"),
     },
     NON_DESTRUCTIVE,
-    async ({ sessionId, itemIds, playCommand, startPositionSec }) => {
-      try {
-        await client.playOnSession(sessionId, itemIds, playCommand, startPositionSec);
+    toToolHandler(({ sessionId, itemIds, playCommand, startPositionSec }) =>
+      toolResult(Effect.gen(function* () {
+        yield* fromPromise(() =>
+          client.playOnSession(sessionId, itemIds, playCommand, startPositionSec),
+        );
         return ok({
           result: `${playCommand} ${itemIds.length} item(s) on session ${sessionId}`,
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -385,22 +368,19 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       confirm: z.boolean().optional().describe("Must be true to proceed."),
     },
     DESTRUCTIVE,
-    async ({ userId, activeOnly, confirm }) => {
-      if (!confirm) {
-        return refuseUnconfirmed("pause all matching Jellyfin sessions");
-      }
+    toToolHandler(({ userId, activeOnly, confirm }) =>
+      toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed("pause all matching Jellyfin sessions");
+        }
 
-      try {
-        const sessions = filterSessions(await client.listSessions(), userId, activeOnly);
-        const failed = await runForSessions(sessions, (session) =>
-          client.pauseSession(session.Id),
-        );
+        const allSessions = yield* fromPromise(() => client.listSessions());
+        const sessions = filterSessions(allSessions, userId, activeOnly);
+        const failed = yield* runForSessions(sessions, (session) => client.pauseSession(session.Id));
         const payload = multiSessionPayload("pause", sessions, failed);
         return failed.length > 0 ? resultWithPartialFailure(payload) : ok(payload);
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -421,22 +401,19 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       confirm: z.boolean().optional().describe("Must be true to proceed."),
     },
     DESTRUCTIVE,
-    async ({ userId, activeOnly, confirm }) => {
-      if (!confirm) {
-        return refuseUnconfirmed("stop all matching Jellyfin sessions");
-      }
+    toToolHandler(({ userId, activeOnly, confirm }) =>
+      toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed("stop all matching Jellyfin sessions");
+        }
 
-      try {
-        const sessions = filterSessions(await client.listSessions(), userId, activeOnly);
-        const failed = await runForSessions(sessions, (session) =>
-          client.stopSession(session.Id),
-        );
+        const allSessions = yield* fromPromise(() => client.listSessions());
+        const sessions = filterSessions(allSessions, userId, activeOnly);
+        const failed = yield* runForSessions(sessions, (session) => client.stopSession(session.Id));
         const payload = multiSessionPayload("stop", sessions, failed);
         return failed.length > 0 ? resultWithPartialFailure(payload) : ok(payload);
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -461,21 +438,20 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
       confirm: z.boolean().optional().describe("Must be true to proceed."),
     },
     DESTRUCTIVE,
-    async ({ text, header, timeoutMs, userId, confirm }) => {
-      if (!confirm) {
-        return refuseUnconfirmed("message all matching active Jellyfin sessions");
-      }
+    toToolHandler(({ text, header, timeoutMs, userId, confirm }) =>
+      toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed("message all matching active Jellyfin sessions");
+        }
 
-      try {
-        const sessions = filterSessions(await client.listSessions(), userId, true);
-        const failed = await runForSessions(sessions, (session) =>
+        const allSessions = yield* fromPromise(() => client.listSessions());
+        const sessions = filterSessions(allSessions, userId, true);
+        const failed = yield* runForSessions(sessions, (session) =>
           client.sendMessage(session.Id, text, header, timeoutMs),
         );
         const payload = multiSessionPayload("message", sessions, failed);
         return failed.length > 0 ? resultWithPartialFailure(payload) : ok(payload);
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 }

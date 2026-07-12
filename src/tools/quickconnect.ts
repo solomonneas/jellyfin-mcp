@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, refuseUnconfirmed, DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 // The underlying JellyfinClient.request() surfaces the failed path in the error
@@ -38,14 +40,12 @@ export function registerQuickConnectTools(
     "Check whether Quick Connect is enabled on the server. Quick Connect lets a user log in on a new client by entering a 6-character code on an already-authenticated client.",
     {},
     READ_ONLY,
-    async () => {
-      try {
-        const enabled = await client.getQuickConnectEnabled();
+    toToolHandler(() =>
+      toolResult(Effect.gen(function* () {
+        const enabled = yield* fromPromise(() => client.getQuickConnectEnabled());
         return ok({ enabled });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      })),
+    ),
   );
 
   server.tool(
@@ -68,17 +68,23 @@ export function registerQuickConnectTools(
         .describe("Must be true to proceed - this grants a session to the specified user account."),
     },
     DESTRUCTIVE,
-    async ({ code, userId, confirm }) => {
-      if (!confirm) {
-        // Don't echo the code back - it's a short-lived auth secret, and tool
-        // output/logs are often captured by MCP clients. Identifying the user
-        // is enough for the operator to know which approval they're reviewing.
-        return refuseUnconfirmed(
-          `authorize the pending Quick Connect code for user ${userId}`,
+    toToolHandler(({ code, userId, confirm }) =>
+      toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          // Don't echo the code back - it's a short-lived auth secret, and tool
+          // output/logs are often captured by MCP clients. Identifying the user
+          // is enough for the operator to know which approval they're reviewing.
+          return refuseUnconfirmed(
+            `authorize the pending Quick Connect code for user ${userId}`,
+          );
+        }
+        const authorizedResult = yield* Effect.either(
+          fromPromise(() => client.authorizeQuickConnect(code, userId)),
         );
-      }
-      try {
-        const authorized = await client.authorizeQuickConnect(code, userId);
+        if (authorizedResult._tag === "Left") {
+          return fail(redactSecretFromError(authorizedResult.left, code));
+        }
+        const authorized = authorizedResult.right;
         // Jellyfin returns `false` when the code is unknown/expired but the
         // request itself succeeded. Treat that as failure so MCP clients see
         // an isError result, not a misleading success with authorized: false.
@@ -90,9 +96,7 @@ export function registerQuickConnectTools(
           );
         }
         return ok({ userId, authorized: true });
-      } catch (error) {
-        return fail(redactSecretFromError(error, code));
-      }
-    },
+      })),
+    ),
   );
 }

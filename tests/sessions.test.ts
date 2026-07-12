@@ -32,6 +32,21 @@ function parseResult(result: { content: { text: string }[] }): Record<string, un
 }
 
 describe("multi-session tools", () => {
+  it("stop session executes without confirm", async () => {
+    const client = {
+      stopSession: vi.fn().mockResolvedValue(undefined),
+    } as unknown as JellyfinClient;
+    const { server, tools } = makeFakeServer();
+    registerSessionTools(server as never, client);
+
+    const tool = tools.get("jellyfin_stop_session");
+    const result = await tool!.handler({ sessionId: "s1" });
+
+    expect(result.isError).toBeUndefined();
+    expect(client.stopSession).toHaveBeenCalledWith("s1");
+    expect(parseResult(result)).toEqual({ result: "stopped session s1" });
+  });
+
   it("pause all refuses without confirm", async () => {
     const client = {
       listSessions: vi.fn(),

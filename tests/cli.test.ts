@@ -223,6 +223,22 @@ describe("run", () => {
     expect(err.join("\n")).toContain("ECONNREFUSED");
   });
 
+  it("returns exit 1 and prints the error when makeClient throws synchronously", async () => {
+    const error = new Error("missing JELLYFIN_API_KEY");
+    const err: string[] = [];
+    const deps: CliDeps = {
+      out: () => {},
+      err: (s) => err.push(s),
+      makeClient: () => {
+        throw error;
+      },
+      startServer: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await expect(run(["libraries"], deps)).resolves.toBe(1);
+    expect(err).toEqual(["missing JELLYFIN_API_KEY"]);
+  });
+
   it("returns exit 2 and prints help on usage error", async () => {
     const { err, deps } = capture();
     expect(await run(["bogus"], deps)).toBe(2);
@@ -245,5 +261,12 @@ describe("run", () => {
     const { deps, startServer } = capture();
     expect(await run(["mcp"], deps)).toBe(0);
     expect(startServer).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the original mcp startup rejection identity", async () => {
+    const startupError = new Error("stdio unavailable");
+    const { deps } = capture({}, vi.fn().mockRejectedValue(startupError));
+
+    await expect(run(["mcp"], deps)).rejects.toBe(startupError);
   });
 });
