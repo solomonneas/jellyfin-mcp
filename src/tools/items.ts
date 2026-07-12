@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, READ_ONLY } from "./_util.js";
 
 const VALID_ITEM_TYPES = [
@@ -14,6 +16,11 @@ const VALID_ITEM_TYPES = [
   "Book",
   "Photo",
 ] as const;
+
+// Lift a Promise-returning client call into Effect, keeping the rejection
+// value as the error channel so handlers can map it to fail() unchanged.
+const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export function registerItemTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -30,9 +37,13 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
       limit: z.number().int().positive().max(200).optional().default(20),
     },
     READ_ONLY,
-    async ({ query, itemTypes, limit }) => {
-      try {
-        const results = await client.searchItems(query, itemTypes, limit);
+    toToolHandler(({ query, itemTypes, limit }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.searchItems(query, itemTypes, limit)),
+        );
+        if (result._tag === "Left") return fail(result.left);
+        const results = result.right;
         return ok({
           totalCount: results.TotalRecordCount,
           items: results.Items.map((item) => ({
@@ -43,10 +54,8 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
             productionYear: item.ProductionYear ?? null,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -59,9 +68,13 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
       limit: z.number().int().positive().max(100).optional().default(20),
     },
     READ_ONLY,
-    async ({ userId, limit }) => {
-      try {
-        const items = await client.getRecentItems(userId, limit);
+    toToolHandler(({ userId, limit }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.getRecentItems(userId, limit)),
+        );
+        if (result._tag === "Left") return fail(result.left);
+        const items = result.right;
         return ok(
           items.map((item) => ({
             id: item.Id,
@@ -72,10 +85,8 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
             dateCreated: item.DateCreated ?? null,
           })),
         );
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -85,13 +96,12 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
       itemId: z.string().describe("Item ID from a search or recent-items result"),
     },
     READ_ONLY,
-    async ({ itemId }) => {
-      try {
-        const item = await client.getItem(itemId);
-        return ok(item);
-      } catch (error) {
-        return fail(error);
-      }
-    },
+    toToolHandler(({ itemId }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(fromPromise(() => client.getItem(itemId)));
+        if (result._tag === "Left") return fail(result.left);
+        return ok(result.right);
+      }),
+    ),
   );
 }

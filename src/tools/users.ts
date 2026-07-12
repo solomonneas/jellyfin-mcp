@@ -1,7 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+
+// Lift a Promise-returning client call into Effect, keeping the rejection
+// value as the error channel so handlers can map it to fail() unchanged.
+const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export function registerUserTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -9,9 +16,11 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
     "List all Jellyfin users with admin/disabled status and last login/activity timestamps.",
     {},
     READ_ONLY,
-    async () => {
-      try {
-        const users = await client.listUsers();
+    toToolHandler(() =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(fromPromise(() => client.listUsers()));
+        if (result._tag === "Left") return fail(result.left);
+        const users = result.right;
         return ok(
           users.map((u) => ({
             id: u.Id,
@@ -22,10 +31,8 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
             lastActivity: u.LastActivityDate ?? null,
           })),
         );
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -35,18 +42,18 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
       name: z.string().min(1).describe("Username for the new account"),
     },
     NON_DESTRUCTIVE,
-    async ({ name }) => {
-      try {
-        const user = await client.createUser(name);
+    toToolHandler(({ name }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(fromPromise(() => client.createUser(name)));
+        if (result._tag === "Left") return fail(result.left);
+        const user = result.right;
         return ok({
           id: user.Id,
           name: user.Name,
           note: "Password not set. Use jellyfin_set_user_password to set one.",
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -60,15 +67,14 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
         .describe("Must be true. Required acknowledgement that the account will be permanently deleted."),
     },
     DESTRUCTIVE,
-    async ({ userId, confirm }) => {
-      if (!confirm) return refuseUnconfirmed(`delete user ${userId}`);
-      try {
-        await client.deleteUser(userId);
+    toToolHandler(({ userId, confirm }) =>
+      Effect.gen(function* () {
+        if (!confirm) return refuseUnconfirmed(`delete user ${userId}`);
+        const result = yield* Effect.either(fromPromise(() => client.deleteUser(userId)));
+        if (result._tag === "Left") return fail(result.left);
         return ok({ result: `user ${userId} deleted` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -79,16 +85,17 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
       disabled: z.boolean().describe("true to disable, false to re-enable"),
     },
     DESTRUCTIVE,
-    async ({ userId, disabled }) => {
-      try {
-        await client.setUserDisabled(userId, disabled);
+    toToolHandler(({ userId, disabled }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.setUserDisabled(userId, disabled)),
+        );
+        if (result._tag === "Left") return fail(result.left);
         return ok({
           result: `user ${userId} ${disabled ? "disabled" : "enabled"}`,
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -103,14 +110,15 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
         .describe("Must be true. Required acknowledgement that the existing password will be replaced."),
     },
     DESTRUCTIVE,
-    async ({ userId, newPassword, confirm }) => {
-      if (!confirm) return refuseUnconfirmed(`change the password for user ${userId}`);
-      try {
-        await client.setUserPassword(userId, newPassword);
+    toToolHandler(({ userId, newPassword, confirm }) =>
+      Effect.gen(function* () {
+        if (!confirm) return refuseUnconfirmed(`change the password for user ${userId}`);
+        const result = yield* Effect.either(
+          fromPromise(() => client.setUserPassword(userId, newPassword)),
+        );
+        if (result._tag === "Left") return fail(result.left);
         return ok({ result: `password updated for user ${userId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 }

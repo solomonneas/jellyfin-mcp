@@ -1,7 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+
+// Lift a Promise-returning client call into Effect, keeping the rejection
+// value as the error channel so handlers can map it to fail() unchanged.
+const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export function registerTaskTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -9,9 +16,11 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
     "List all Jellyfin scheduled tasks with state (Idle/Running), progress %, and last execution info.",
     {},
     READ_ONLY,
-    async () => {
-      try {
-        const tasks = await client.listScheduledTasks();
+    toToolHandler(() =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(fromPromise(() => client.listScheduledTasks()));
+        if (result._tag === "Left") return fail(result.left);
+        const tasks = result.right;
         return ok(
           tasks.map((t) => ({
             id: t.Id,
@@ -25,10 +34,8 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
             lastError: t.LastExecutionResult?.ErrorMessage ?? null,
           })),
         );
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -38,14 +45,13 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
       taskId: z.string().describe("Task ID from jellyfin_list_scheduled_tasks"),
     },
     NON_DESTRUCTIVE,
-    async ({ taskId }) => {
-      try {
-        await client.runScheduledTask(taskId);
+    toToolHandler(({ taskId }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(fromPromise(() => client.runScheduledTask(taskId)));
+        if (result._tag === "Left") return fail(result.left);
         return ok({ result: `task ${taskId} started` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -59,9 +65,13 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
         .describe("ISO 8601 timestamp - only return entries newer than this (e.g. 2026-04-19T00:00:00Z)"),
     },
     READ_ONLY,
-    async ({ limit, minDate }) => {
-      try {
-        const log = await client.getActivityLog(limit, minDate);
+    toToolHandler(({ limit, minDate }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.getActivityLog(limit, minDate)),
+        );
+        if (result._tag === "Left") return fail(result.left);
+        const log = result.right;
         return ok({
           totalCount: log.TotalRecordCount,
           entries: log.Items.map((e) => ({
@@ -75,9 +85,7 @@ export function registerTaskTools(server: McpServer, client: JellyfinClient): vo
             detail: e.Overview ?? null,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 }

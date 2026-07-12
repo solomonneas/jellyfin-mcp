@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, READ_ONLY } from "./_util.js";
 
 // 1 tick = 100 nanoseconds. Mirrors the constant in client.ts; kept local so
@@ -8,6 +10,11 @@ import { ok, fail, READ_ONLY } from "./_util.js";
 const TICKS_PER_SECOND = 10_000_000;
 const ticksToSeconds = (ticks: number | undefined | null): number | null =>
   typeof ticks === "number" ? Math.round(ticks / TICKS_PER_SECOND) : null;
+
+// Lift a Promise-returning client call into Effect, keeping the rejection
+// value as the error channel so handlers can map it to fail() unchanged.
+const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export function registerDiscoveryTools(
   server: McpServer,
@@ -25,12 +32,16 @@ export function registerDiscoveryTools(
       limit: z.number().int().positive().max(100).optional().default(20),
     },
     READ_ONLY,
-    async ({ userId, limit }) => {
-      try {
-        const result = await client.getResumeItems(userId, limit);
+    toToolHandler(({ userId, limit }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.getResumeItems(userId, limit)),
+        );
+        if (result._tag === "Left") return fail(result.left);
+        const payload = result.right;
         return ok({
-          totalCount: result.TotalRecordCount,
-          items: result.Items.map((item) => ({
+          totalCount: payload.TotalRecordCount,
+          items: payload.Items.map((item) => ({
             id: item.Id,
             name: item.Name,
             type: item.Type,
@@ -43,10 +54,8 @@ export function registerDiscoveryTools(
             playedPercentage: item.UserData?.PlayedPercentage ?? null,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -67,12 +76,16 @@ export function registerDiscoveryTools(
       limit: z.number().int().positive().max(100).optional().default(20),
     },
     READ_ONLY,
-    async ({ userId, seriesId, limit }) => {
-      try {
-        const result = await client.getNextUp(userId, limit, seriesId);
+    toToolHandler(({ userId, seriesId, limit }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.getNextUp(userId, limit, seriesId)),
+        );
+        if (result._tag === "Left") return fail(result.left);
+        const payload = result.right;
         return ok({
-          totalCount: result.TotalRecordCount,
-          items: result.Items.map((item) => ({
+          totalCount: payload.TotalRecordCount,
+          items: payload.Items.map((item) => ({
             id: item.Id,
             name: item.Name,
             type: item.Type,
@@ -83,10 +96,8 @@ export function registerDiscoveryTools(
             runtimeSeconds: ticksToSeconds(item.RunTimeTicks),
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -107,12 +118,16 @@ export function registerDiscoveryTools(
       limit: z.number().int().positive().max(100).optional().default(20),
     },
     READ_ONLY,
-    async ({ itemId, userId, limit }) => {
-      try {
-        const result = await client.getSimilarItems(itemId, userId, limit);
+    toToolHandler(({ itemId, userId, limit }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.getSimilarItems(itemId, userId, limit)),
+        );
+        if (result._tag === "Left") return fail(result.left);
+        const payload = result.right;
         return ok({
-          totalCount: result.TotalRecordCount,
-          items: result.Items.map((item) => ({
+          totalCount: payload.TotalRecordCount,
+          items: payload.Items.map((item) => ({
             id: item.Id,
             name: item.Name,
             type: item.Type,
@@ -121,9 +136,7 @@ export function registerDiscoveryTools(
             communityRating: item.CommunityRating ?? null,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 }

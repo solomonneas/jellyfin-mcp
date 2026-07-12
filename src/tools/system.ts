@@ -1,7 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, refuseUnconfirmed, DESTRUCTIVE, READ_ONLY } from "./_util.js";
+
+// Lift a Promise-returning client call into Effect, keeping the rejection
+// value as the error channel so handlers can map it to fail() unchanged.
+const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export function registerSystemTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -9,9 +16,11 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
     "Get Jellyfin server info: name, version, OS, architecture, local address, pending restart, update availability.",
     {},
     READ_ONLY,
-    async () => {
-      try {
-        const info = await client.getSystemInfo();
+    toToolHandler(() =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(fromPromise(() => client.getSystemInfo()));
+        if (result._tag === "Left") return fail(result.left);
+        const info = result.right;
         return ok({
           serverName: info.ServerName,
           version: info.Version,
@@ -22,10 +31,8 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
           hasPendingRestart: info.HasPendingRestart ?? false,
           hasUpdateAvailable: info.HasUpdateAvailable ?? false,
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -38,15 +45,14 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
         .describe("Must be true. Required acknowledgement that active sessions will disconnect."),
     },
     DESTRUCTIVE,
-    async ({ confirm }) => {
-      if (!confirm) return refuseUnconfirmed("restart the Jellyfin server");
-      try {
-        await client.restart();
+    toToolHandler(({ confirm }) =>
+      Effect.gen(function* () {
+        if (!confirm) return refuseUnconfirmed("restart the Jellyfin server");
+        const result = yield* Effect.either(fromPromise(() => client.restart()));
+        if (result._tag === "Left") return fail(result.left);
         return ok({ result: "restart signal sent" });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -59,14 +65,13 @@ export function registerSystemTools(server: McpServer, client: JellyfinClient): 
         .describe("Must be true. Required acknowledgement that the server will not come back on its own."),
     },
     DESTRUCTIVE,
-    async ({ confirm }) => {
-      if (!confirm) return refuseUnconfirmed("shut down the Jellyfin server");
-      try {
-        await client.shutdown();
+    toToolHandler(({ confirm }) =>
+      Effect.gen(function* () {
+        if (!confirm) return refuseUnconfirmed("shut down the Jellyfin server");
+        const result = yield* Effect.either(fromPromise(() => client.shutdown()));
+        if (result._tag === "Left") return fail(result.left);
         return ok({ result: "shutdown signal sent" });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 }

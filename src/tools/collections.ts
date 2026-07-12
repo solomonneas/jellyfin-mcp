@@ -1,7 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, DESTRUCTIVE, NON_DESTRUCTIVE } from "./_util.js";
+
+// Lift a Promise-returning client call into Effect, keeping the rejection
+// value as the error channel so handlers can map it to fail() unchanged.
+const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export function registerCollectionTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -16,14 +23,15 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
         .describe("Optional initial item IDs"),
     },
     NON_DESTRUCTIVE,
-    async ({ name, itemIds }) => {
-      try {
-        const result = await client.createCollection(name, itemIds);
-        return ok({ id: result.Id, name });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+    toToolHandler(({ name, itemIds }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.createCollection(name, itemIds)),
+        );
+        if (result._tag === "Left") return fail(result.left);
+        return ok({ id: result.right.Id, name });
+      }),
+    ),
   );
 
   server.tool(
@@ -34,14 +42,15 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
       itemIds: z.array(z.string().min(1)).min(1).describe("Item IDs to add"),
     },
     NON_DESTRUCTIVE,
-    async ({ collectionId, itemIds }) => {
-      try {
-        await client.addToCollection(collectionId, itemIds);
+    toToolHandler(({ collectionId, itemIds }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.addToCollection(collectionId, itemIds)),
+        );
+        if (result._tag === "Left") return fail(result.left);
         return ok({ result: `added ${itemIds.length} item(s) to collection ${collectionId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -52,15 +61,16 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
       itemIds: z.array(z.string().min(1)).min(1).describe("Item IDs to remove"),
     },
     DESTRUCTIVE,
-    async ({ collectionId, itemIds }) => {
-      try {
-        await client.removeFromCollection(collectionId, itemIds);
+    toToolHandler(({ collectionId, itemIds }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.removeFromCollection(collectionId, itemIds)),
+        );
+        if (result._tag === "Left") return fail(result.left);
         return ok({
           result: `removed ${itemIds.length} item(s) from collection ${collectionId}`,
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 }

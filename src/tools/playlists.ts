@@ -1,7 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
+import { toToolHandler } from "../effect/tool-adapter.js";
 import { ok, fail, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+
+// Lift a Promise-returning client call into Effect, keeping the rejection
+// value as the error channel so handlers can map it to fail() unchanged.
+const fromPromise = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown> =>
+  Effect.tryPromise({ try: thunk, catch: (error) => error });
 
 export function registerPlaylistTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -11,20 +18,20 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
       userId: z.string().describe("User ID - playlists are scoped per user"),
     },
     READ_ONLY,
-    async ({ userId }) => {
-      try {
-        const result = await client.listPlaylists(userId);
+    toToolHandler(({ userId }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(fromPromise(() => client.listPlaylists(userId)));
+        if (result._tag === "Left") return fail(result.left);
+        const payload = result.right;
         return ok({
-          totalCount: result.TotalRecordCount,
-          playlists: result.Items.map((p) => ({
+          totalCount: payload.TotalRecordCount,
+          playlists: payload.Items.map((p) => ({
             id: p.Id,
             name: p.Name,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -44,14 +51,16 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
         .describe("Media type - required by Jellyfin if itemIds is empty"),
     },
     NON_DESTRUCTIVE,
-    async ({ name, userId, itemIds, mediaType }) => {
-      try {
-        const result = await client.createPlaylist(name, userId, itemIds, mediaType);
-        return ok({ id: result.Id, name: result.Name ?? name });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+    toToolHandler(({ name, userId, itemIds, mediaType }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.createPlaylist(name, userId, itemIds, mediaType)),
+        );
+        if (result._tag === "Left") return fail(result.left);
+        const created = result.right;
+        return ok({ id: created.Id, name: created.Name ?? name });
+      }),
+    ),
   );
 
   server.tool(
@@ -62,12 +71,16 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
       userId: z.string().describe("User ID - playlists return user-scoped views"),
     },
     READ_ONLY,
-    async ({ playlistId, userId }) => {
-      try {
-        const result = await client.getPlaylistItems(playlistId, userId);
+    toToolHandler(({ playlistId, userId }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.getPlaylistItems(playlistId, userId)),
+        );
+        if (result._tag === "Left") return fail(result.left);
+        const payload = result.right;
         return ok({
-          totalCount: result.TotalRecordCount,
-          items: result.Items.map((i) => ({
+          totalCount: payload.TotalRecordCount,
+          items: payload.Items.map((i) => ({
             playlistEntryId: (i as { PlaylistItemId?: string }).PlaylistItemId ?? null,
             itemId: i.Id,
             name: i.Name,
@@ -75,10 +88,8 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
             seriesName: i.SeriesName ?? null,
           })),
         });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -90,14 +101,15 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
       userId: z.string().describe("User ID performing the add"),
     },
     NON_DESTRUCTIVE,
-    async ({ playlistId, itemIds, userId }) => {
-      try {
-        await client.addToPlaylist(playlistId, itemIds, userId);
+    toToolHandler(({ playlistId, itemIds, userId }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.addToPlaylist(playlistId, itemIds, userId)),
+        );
+        if (result._tag === "Left") return fail(result.left);
         return ok({ result: `added ${itemIds.length} item(s) to playlist ${playlistId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 
   server.tool(
@@ -111,13 +123,14 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
         .describe("playlistEntryId values from jellyfin_get_playlist_items"),
     },
     DESTRUCTIVE,
-    async ({ playlistId, entryIds }) => {
-      try {
-        await client.removeFromPlaylist(playlistId, entryIds);
+    toToolHandler(({ playlistId, entryIds }) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.either(
+          fromPromise(() => client.removeFromPlaylist(playlistId, entryIds)),
+        );
+        if (result._tag === "Left") return fail(result.left);
         return ok({ result: `removed ${entryIds.length} entry/entries from playlist ${playlistId}` });
-      } catch (error) {
-        return fail(error);
-      }
-    },
+      }),
+    ),
   );
 }
