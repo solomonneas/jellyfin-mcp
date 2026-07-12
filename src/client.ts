@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { Agent } from "undici";
 import type { JellyfinConfig } from "./config.js";
 import type {
@@ -46,9 +47,15 @@ export class JellyfinClient {
     options: RequestInit = {},
     parseJson = true,
   ): Promise<T> {
+    return Effect.runPromise(this.requestEffect<T>(path, options, parseJson));
+  }
+
+  private requestEffect<T>(
+    path: string,
+    options: RequestInit = {},
+    parseJson = true,
+  ): Effect.Effect<T, Error, never> {
     const url = `${this.baseUrl}${path}`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     // Jellyfin accepts the token in either X-Emby-Token or X-MediaBrowser-Token.
     // X-Emby-Token is the canonical modern one.
@@ -60,61 +67,71 @@ export class JellyfinClient {
       headers["Content-Type"] = "application/json";
     }
 
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers: { ...headers, ...(options.headers as Record<string, string>) },
-        signal: controller.signal,
-        // `dispatcher` is an undici-specific fetch option not in the lib.dom
-        // RequestInit type. Only set when TLS verification is disabled; left
-        // undefined otherwise so the default (validating) dispatcher is used.
-        ...(this.dispatcher ? { dispatcher: this.dispatcher } : {}),
-      } as RequestInit & { dispatcher?: Agent });
+    return Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+        return { controller, timeoutId };
+      }),
+      ({ controller }) =>
+        Effect.tryPromise({
+          try: async () => {
+            const response = await fetch(url, {
+              ...options,
+              headers: { ...headers, ...(options.headers as Record<string, string>) },
+              signal: controller.signal,
+              // `dispatcher` is an undici-specific fetch option not in the lib.dom
+              // RequestInit type. Only set when TLS verification is disabled; left
+              // undefined otherwise so the default (validating) dispatcher is used.
+              ...(this.dispatcher ? { dispatcher: this.dispatcher } : {}),
+            } as RequestInit & { dispatcher?: Agent });
 
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        const messages: Record<number, string> = {
-          401: "Invalid API key or unauthorized access",
-          403: "Forbidden - API key lacks permission for this operation",
-          404: `Resource not found: ${path}`,
-          500: "Jellyfin server error",
-        };
-        const msg = messages[response.status] ?? `HTTP ${response.status}`;
-        // The raw downstream body can carry internal Jellyfin detail (stack
-        // traces, internal paths, IDs). fail() returns thrown messages verbatim
-        // to the LLM/MCP client, so log the full body server-side (stderr) for
-        // operators and surface only the status-derived summary to the client,
-        // matching the Quick Connect secret-redaction posture elsewhere.
-        if (body) {
-          console.error(
-            `jellyfin-mcp: HTTP ${response.status} from ${path}: ${body}`,
-          );
-        }
-        throw new Error(`${msg} (HTTP ${response.status})`);
-      }
+            if (!response.ok) {
+              const body = await response.text().catch(() => "");
+              const messages: Record<number, string> = {
+                401: "Invalid API key or unauthorized access",
+                403: "Forbidden - API key lacks permission for this operation",
+                404: `Resource not found: ${path}`,
+                500: "Jellyfin server error",
+              };
+              const msg = messages[response.status] ?? `HTTP ${response.status}`;
+              // The raw downstream body can carry internal Jellyfin detail (stack
+              // traces, internal paths, IDs). fail() returns thrown messages verbatim
+              // to the LLM/MCP client, so log the full body server-side (stderr) for
+              // operators and surface only the status-derived summary to the client,
+              // matching the Quick Connect secret-redaction posture elsewhere.
+              if (body) {
+                console.error(
+                  `jellyfin-mcp: HTTP ${response.status} from ${path}: ${body}`,
+                );
+              }
+              throw new Error(`${msg} (HTTP ${response.status})`);
+            }
 
-      if (!parseJson) {
-        return undefined as T;
-      }
+            if (!parseJson) {
+              return undefined as T;
+            }
 
-      // Some POST endpoints (e.g. /Sessions/{id}/Playing/Pause) return 204 No Content.
-      if (response.status === 204) {
-        return undefined as T;
-      }
+            // Some POST endpoints (e.g. /Sessions/{id}/Playing/Pause) return 204 No Content.
+            if (response.status === 204) {
+              return undefined as T;
+            }
 
-      const text = await response.text();
-      if (!text) {
-        return undefined as T;
-      }
-      return JSON.parse(text) as T;
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new Error(`Request to ${path} timed out after ${this.timeout}ms`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+            const text = await response.text();
+            if (!text) {
+              return undefined as T;
+            }
+            return JSON.parse(text) as T;
+          },
+          catch: (error) => {
+            if (error instanceof Error && error.name === "AbortError") {
+              return new Error(`Request to ${path} timed out after ${this.timeout}ms`);
+            }
+            return error instanceof Error ? error : new Error(String(error));
+          },
+        }),
+      ({ timeoutId }) => Effect.sync(() => clearTimeout(timeoutId)),
+    );
   }
 
   // ── System ────────────────────────────────────────────────────────────────
