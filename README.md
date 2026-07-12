@@ -104,7 +104,7 @@ Then ask your agent: *"What's playing on Jellyfin right now?"* It will call `jel
 - `jellyfin_list_users` - with admin / disabled flags and last login timestamps
 - `jellyfin_create_user`
 - `jellyfin_delete_user` *(requires `confirm: true`)*
-- `jellyfin_set_user_disabled`
+- `jellyfin_set_user_disabled` *(requires `confirm: true`)*
 - `jellyfin_set_user_password` *(requires `confirm: true`)*
 
 > **Warning:** `jellyfin_set_user_password` takes the new password as plaintext tool input. That means the password transits your LLM conversation, the model provider's request logs, and any saved session transcript. Treat any password set this way as exposed: use a throwaway value and have the user change it in the Jellyfin UI, or set passwords in the Jellyfin dashboard instead.
@@ -113,7 +113,7 @@ Then ask your agent: *"What's playing on Jellyfin right now?"* It will call `jel
 - `jellyfin_list_sessions` - active/idle clients with now-playing, progress, paused state
 - `jellyfin_pause_session`
 - `jellyfin_resume_session`
-- `jellyfin_stop_session`
+- `jellyfin_stop_session` *(requires `confirm: true`)*
 - `jellyfin_send_message_to_session` - toast/dialog on the client
 - `jellyfin_seek_session` - jump to a position in seconds
 - `jellyfin_next_track` / `jellyfin_previous_track`
@@ -140,12 +140,12 @@ Then ask your agent: *"What's playing on Jellyfin right now?"* It will call `jel
 - `jellyfin_create_playlist`
 - `jellyfin_get_playlist_items` - returns `playlistEntryId` (use this for removal, not the raw item ID)
 - `jellyfin_add_to_playlist`
-- `jellyfin_remove_from_playlist`
+- `jellyfin_remove_from_playlist` *(requires `confirm: true`)*
 
 ### Collections
 - `jellyfin_create_collection`
 - `jellyfin_add_to_collection`
-- `jellyfin_remove_from_collection`
+- `jellyfin_remove_from_collection` *(requires `confirm: true`)*
 
 ### Items
 - `jellyfin_search_items` - by name, optional type filter

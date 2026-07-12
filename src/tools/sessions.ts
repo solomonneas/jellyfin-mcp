@@ -177,19 +177,22 @@ export function registerSessionTools(server: McpServer, client: JellyfinClient):
 
   server.tool(
     "jellyfin_stop_session",
-    "Stop playback on a specific session (disconnects from the current item).",
+    "Stop playback on a specific session (disconnects from the current item). Requires confirm: true.",
     {
       sessionId: z.string().describe("Session ID from jellyfin_list_sessions"),
+      confirm: z.boolean().optional().describe("Must be true to proceed with stopping the session."),
     },
     DESTRUCTIVE,
-    toToolHandler(({ sessionId }) =>
+    toToolHandler(({ sessionId, confirm }) =>
       toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed(`stop session ${sessionId}`);
+        }
         yield* fromPromise(() => client.stopSession(sessionId));
         return ok({ result: `stopped session ${sessionId}` });
       })),
     ),
   );
-
   server.tool(
     "jellyfin_send_message_to_session",
     "Send a text message to a Jellyfin client session. Shows as a toast/dialog on the user's device.",

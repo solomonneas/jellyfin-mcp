@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
 import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
+import { ok, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE, READ_ONLY } from "./_util.js";
 
 export function registerPlaylistTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -98,17 +98,24 @@ export function registerPlaylistTools(server: McpServer, client: JellyfinClient)
 
   server.tool(
     "jellyfin_remove_from_playlist",
-    "Remove entries from a playlist by their playlistEntryId values (NOT raw item IDs - get them from jellyfin_get_playlist_items).",
+    "Remove entries from a playlist by their playlistEntryId values (NOT raw item IDs - get them from jellyfin_get_playlist_items). Requires confirm: true.",
     {
       playlistId: z.string().describe("Playlist ID"),
       entryIds: z
         .array(z.string().min(1))
         .min(1)
         .describe("playlistEntryId values from jellyfin_get_playlist_items"),
+      confirm: z
+        .boolean()
+        .optional()
+        .describe("Must be true to proceed with removing entries from the playlist."),
     },
     DESTRUCTIVE,
-    toToolHandler(({ playlistId, entryIds }) =>
+    toToolHandler(({ playlistId, entryIds, confirm }) =>
       toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed(`remove entries from playlist ${playlistId}`);
+        }
         yield* fromPromise(() => client.removeFromPlaylist(playlistId, entryIds));
         return ok({ result: `removed ${entryIds.length} entry/entries from playlist ${playlistId}` });
       })),
