@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { JellyfinClient } from "./client.js";
 import { getConfig } from "./config.js";
 import { fromPromise } from "./effect/tool-adapter.js";
@@ -397,7 +397,9 @@ export interface CliDeps {
 }
 
 export async function run(argv: string[], deps: CliDeps): Promise<number> {
-  return Effect.runPromise(runEffect(argv, deps));
+  const exit = await Effect.runPromiseExit(runEffect(argv, deps));
+  if (Exit.isSuccess(exit)) return exit.value;
+  throw Cause.squash(exit.cause);
 }
 
 const runEffect = (argv: string[], deps: CliDeps): Effect.Effect<number> =>
@@ -447,7 +449,10 @@ function dispatch(
   deps: CliDeps,
 ): Effect.Effect<number, unknown> {
   return Effect.gen(function* () {
-    const client = deps.makeClient();
+    const client = yield* Effect.try({
+      try: () => deps.makeClient(),
+      catch: (error) => error,
+    });
     const emit = (raw: unknown, render: () => string, json: boolean): number => {
       deps.out(json ? JSON.stringify(raw, null, 2) : render());
       return 0;

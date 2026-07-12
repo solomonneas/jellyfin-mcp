@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { fail } from "../tools/_util.js";
 
 type ToolResult = ReturnType<typeof fail>;
@@ -14,13 +14,20 @@ export const runPromise = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A>
 export const toolResult = (
   effect: Effect.Effect<ToolResult, unknown, never>,
 ): Effect.Effect<ToolResult, never, never> =>
-  Effect.either(effect).pipe(
-    Effect.map((result) => (result._tag === "Left" ? fail(result.left) : result.right)),
+  Effect.either(Effect.sandbox(effect)).pipe(
+    Effect.map((result) =>
+      result._tag === "Left" ? fail(Cause.squash(result.left)) : result.right,
+    ),
   );
 
 export const toToolHandler =
-  <Args, A, E>(
-    handler: (args: Args) => Effect.Effect<A, E, never>,
-  ): ((args: Args) => Promise<A>) =>
-  (args) =>
-    runPromise(handler(args));
+  <Args>(
+    handler: (args: Args) => Effect.Effect<ToolResult, unknown, never>,
+  ): ((args: Args) => Promise<ToolResult>) =>
+  (args) => {
+    try {
+      return runPromise(toolResult(handler(args)));
+    } catch (error) {
+      return Promise.resolve(fail(error));
+    }
+  };
