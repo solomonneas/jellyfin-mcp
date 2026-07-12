@@ -1,5 +1,10 @@
 import { Data } from "effect";
 
+/**
+ * Jellyfin-specific tagged errors. Kit `OperatorError` uses different tags and
+ * field shapes (method/path vs path/summary); client and request contracts pin
+ * these classes, so they stay repo-local rather than aliasing kit errors.
+ */
 export class MissingConfigError extends Data.TaggedError("MissingConfigError")<{
   readonly variable: string;
   readonly message: string;
