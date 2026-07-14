@@ -2,6 +2,9 @@
   <img src="docs/assets/jellyctrl-social-preview.jpg" alt="jellyctrl banner" width="900">
 </p>
 
+<p align="center">
+  <a href="https://lidless.dev"><img src="docs/assets/marks/jellyctrl-circle.png" width="48" alt="Lidless Labs"></a>
+</p>
 <h1 align="center">jellyctrl</h1>
 
 <p align="center"><strong>Operator control CLI for Jellyfin, with MCP compatibility built in.</strong></p>
@@ -451,3 +454,11 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 ## License
 
 [MIT](LICENSE)
+
+---
+
+<p align="center"><a href="https://lidless.dev">Part of <strong>Lidless Labs</strong></a> &middot; the eye does not close</p>
+
+<p align="center"><sub><strong>Homelab:</strong> <a href="https://github.com/lidless-labs/proxmox-mcp">proxmox-mcp</a> &middot; <a href="https://github.com/lidless-labs/adguardctrl">adguardctrl</a> &middot; <a href="https://github.com/lidless-labs/immichctrl">immichctrl</a> &middot; <a href="https://github.com/lidless-labs/proxguard">proxguard</a></sub></p>
+
+<p align="center"><sub><a href="https://lidless.dev">All tools</a> &middot; <a href="https://github.com/lidless-labs">Lidless Labs on GitHub</a></sub></p>
