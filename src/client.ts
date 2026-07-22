@@ -71,10 +71,8 @@ export class JellyfinClient {
   ): Effect.Effect<T, JellyfinRequestError, never> {
     const url = `${this.baseUrl}${path}`;
 
-    // Jellyfin accepts the token in either X-Emby-Token or X-MediaBrowser-Token.
-    // X-Emby-Token is the canonical modern one.
     const headers: Record<string, string> = {
-      "X-Emby-Token": this.config.apiKey,
+      Authorization: `MediaBrowser Token="${this.config.apiKey}"`,
       Accept: "application/json",
     };
     if (options.body) {

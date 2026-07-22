@@ -23,7 +23,7 @@ describe("JellyfinClient", () => {
 
   it("sends X-Emby-Token on requests", async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ ServerName: "Test", Version: "10.11.5", Id: "abc" }), {
+      new Response(JSON.stringify({ ServerName: "Test", Version: "12.0.0", Id: "abc" }), {
         status: 200,
       }),
     );
@@ -34,7 +34,7 @@ describe("JellyfinClient", () => {
     const [url, opts] = fetchMock.mock.calls[0];
     expect(url).toBe("http://jellyfin.test/System/Info");
     const headers = opts.headers as Record<string, string>;
-    expect(headers["X-Emby-Token"]).toBe("test-key");
+    expect(headers["Authorization"]).toBe('MediaBrowser Token="test-key"');
   });
 
   it("surfaces 401 with a clear message", async () => {
