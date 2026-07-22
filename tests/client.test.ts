@@ -21,7 +21,7 @@ describe("JellyfinClient", () => {
     vi.unstubAllGlobals();
   });
 
-  it("sends X-Emby-Token on requests", async () => {
+  it("sends the MediaBrowser Authorization token on requests", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ ServerName: "Test", Version: "12.0.0", Id: "abc" }), {
         status: 200,
