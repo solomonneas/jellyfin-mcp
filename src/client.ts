@@ -71,10 +71,13 @@ export class JellyfinClient {
   ): Effect.Effect<T, JellyfinRequestError, never> {
     const url = `${this.baseUrl}${path}`;
 
-    // Jellyfin accepts the token in either X-Emby-Token or X-MediaBrowser-Token.
-    // X-Emby-Token is the canonical modern one.
+    // Jellyfin/Emby authenticate via the MediaBrowser authorization scheme.
+    // For a static API key we only need the Token field; the Client/Device/
+    // DeviceId/Version fields a user-session login carries are not required.
+    // This replaces the legacy X-Emby-Token header, which Jellyfin 12.0 drops,
+    // and works on every server since 10.0.0.
     const headers: Record<string, string> = {
-      "X-Emby-Token": this.config.apiKey,
+      Authorization: `MediaBrowser Token="${this.config.apiKey}"`,
       Accept: "application/json",
     };
     if (options.body) {
