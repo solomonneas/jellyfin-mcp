@@ -162,3 +162,18 @@ export type GeneralCommand =
   | "Unmute"
   | "ToggleMute"
   | "DisplayMessage";
+
+// Item types that Jellyfin users commonly favorite. Shared between the
+// client's default IncludeItemTypes and the tool's Zod enum so they stay in
+// sync without duplicating the list.
+export const VALID_ITEM_TYPES = [
+  "Movie",
+  "Series",
+  "Episode",
+  "Season",
+  "Audio",
+  "MusicAlbum",
+  "MusicArtist",
+  "Book",
+  "Photo",
+] as const;

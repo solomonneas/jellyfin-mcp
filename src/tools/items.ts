@@ -4,18 +4,8 @@ import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
 import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
 import { ok, READ_ONLY } from "./_util.js";
+import { VALID_ITEM_TYPES } from "../types.js";
 
-const VALID_ITEM_TYPES = [
-  "Movie",
-  "Series",
-  "Episode",
-  "Season",
-  "Audio",
-  "MusicAlbum",
-  "MusicArtist",
-  "Book",
-  "Photo",
-] as const;
 
 export function registerItemTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -87,6 +77,43 @@ export function registerItemTools(server: McpServer, client: JellyfinClient): vo
       toolResult(Effect.gen(function* () {
         const item = yield* fromPromise(() => client.getItem(itemId));
         return ok(item);
+      })),
+    ),
+  );
+
+  server.tool(
+    "jellyfin_get_favorite_items",
+    "Get a user's favorite items. Drives 'what do I like?' queries. Returns movies, series, music, and more with their metadata.",
+    {
+      userId: z.string().describe("User ID whose favorite items to return."),
+      itemTypes: z
+        .array(z.enum(VALID_ITEM_TYPES))
+        .min(1)
+        .optional()
+        .describe("Optional item types to include (e.g. ['Movie'], ['Series', 'Episode']). Omit for all types."),
+      limit: z.number().int().positive().max(200).optional().default(20),
+      startIndex: z.number().int().nonnegative().optional().default(0),
+    },
+    READ_ONLY,
+    toToolHandler(({ userId, itemTypes, limit, startIndex }) =>
+      toolResult(Effect.gen(function* () {
+        const result = yield* fromPromise(() => client.getFavoriteItems(
+          userId,
+          limit,
+          startIndex,
+          itemTypes,
+        ));
+        return ok({
+          totalCount: result.TotalRecordCount,
+          startIndex: result.StartIndex ?? startIndex,
+          items: result.Items.map((item) => ({
+            id: item.Id,
+            name: item.Name,
+            type: item.Type,
+            seriesName: item.SeriesName ?? null,
+            productionYear: item.ProductionYear ?? null,
+          })),
+        });
       })),
     ),
   );
