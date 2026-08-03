@@ -162,3 +162,17 @@ export type GeneralCommand =
   | "Unmute"
   | "ToggleMute"
   | "DisplayMessage";
+
+// Item types exposed by item-tool schemas for explicit filtering. Keep the
+// list centralized so their enums and descriptions stay in sync.
+export const VALID_ITEM_TYPES = [
+  "Movie",
+  "Series",
+  "Episode",
+  "Season",
+  "Audio",
+  "MusicAlbum",
+  "MusicArtist",
+  "Book",
+  "Photo",
+] as const;

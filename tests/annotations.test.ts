@@ -50,6 +50,7 @@ const READ_ONLY_TOOLS = [
   "jellyfin_search_items",
   "jellyfin_get_recent_items",
   "jellyfin_get_item",
+  "jellyfin_get_favorite_items",
   "jellyfin_list_scheduled_tasks",
   "jellyfin_get_activity_log",
   "jellyfin_preview_continue_watching_clear",
@@ -85,8 +86,8 @@ const DESTRUCTIVE_TOOLS = [
 describe("MCP tool annotations", () => {
   const tools = captureAllTools();
 
-  it("registers all 56 tools", () => {
-    expect(tools.size).toBe(56);
+  it("registers all 57 tools", () => {
+    expect(tools.size).toBe(57);
   });
 
   it("every tool carries annotations with an explicit readOnlyHint", () => {

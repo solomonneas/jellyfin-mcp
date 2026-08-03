@@ -331,6 +331,31 @@ export class JellyfinClient {
     return this.request<ItemsResponse>(`/Shows/NextUp?${params.toString()}`);
   }
 
+  // Favorites uses GET /Users/{userId}/Items?filters=IsFavorite. Jellyfin's
+  // IsFavorite filter requires a user-scoped call (the global /Items endpoint
+  // does not honor it), and there is no dedicated /Users/{userId}/Favorites
+  // endpoint, so we piggyback on the Items collection endpoint with the
+  // IsFavorite filter. IncludeItemTypes is optional and is only sent when the
+  // caller requests a narrower result set.
+  async getFavoriteItems(
+    userId: string,
+    limit = 20,
+    startIndex = 0,
+    itemTypes?: string[],
+  ): Promise<ItemsResponse> {
+    const params = new URLSearchParams({
+      Recursive: "true",
+      Filters: "IsFavorite",
+      Limit: String(limit),
+      StartIndex: String(startIndex),
+      Fields: "SeriesName,SeriesId,ProductionYear,UserData",
+    });
+    if (itemTypes?.length) params.set("IncludeItemTypes", itemTypes.join(","));
+    return this.request<ItemsResponse>(
+      `/Users/${encodeURIComponent(userId)}/Items?${params.toString()}`,
+    );
+  }
+
   // Similar uses Jellyfin's built-in recommender (genre/tag/studio overlap).
   // userId is optional but recommended - it lets Jellyfin exclude already-watched
   // items and hydrate UserData on the response.

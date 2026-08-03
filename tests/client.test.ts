@@ -412,6 +412,44 @@ describe("JellyfinClient", () => {
     expect(parsed.searchParams.get("StartIndex")).toBe("5");
   });
 
+  it("getFavoriteItems hits per-user Items path with IsFavorite filter", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 }),
+    );
+    await client.getFavoriteItems("user-42");
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.pathname).toBe("/Users/user-42/Items");
+    expect(parsed.searchParams.get("Filters")).toBe("IsFavorite");
+    expect(parsed.searchParams.get("Recursive")).toBe("true");
+    expect(parsed.searchParams.get("IncludeItemTypes")).toBeNull();
+    expect(parsed.searchParams.get("Limit")).toBe("20");
+    expect(parsed.searchParams.get("StartIndex")).toBe("0");
+    expect(parsed.searchParams.get("Fields")).toBe("SeriesName,SeriesId,ProductionYear,UserData");
+  });
+
+  it("getFavoriteItems uses the caller-supplied IncludeItemTypes when given", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 }),
+    );
+    await client.getFavoriteItems("user-42", 50, 10, ["Series", "Episode"]);
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.searchParams.get("IncludeItemTypes")).toBe("Series,Episode");
+    expect(parsed.searchParams.get("Limit")).toBe("50");
+    expect(parsed.searchParams.get("StartIndex")).toBe("10");
+  });
+
+  it("getFavoriteItems URL-encodes the userId into the path", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 }),
+    );
+    await client.getFavoriteItems("user/with space", 5);
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(url as string);
+    expect(parsed.pathname).toBe("/Users/user%2Fwith%20space/Items");
+  });
+
   it("getResumeItems accepts a start index for pagination", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 }),
