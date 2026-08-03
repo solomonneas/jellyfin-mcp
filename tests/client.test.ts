@@ -422,6 +422,7 @@ describe("JellyfinClient", () => {
     expect(parsed.pathname).toBe("/Users/user-42/Items");
     expect(parsed.searchParams.get("Filters")).toBe("IsFavorite");
     expect(parsed.searchParams.get("Recursive")).toBe("true");
+    expect(parsed.searchParams.get("IncludeItemTypes")).toBeNull();
     expect(parsed.searchParams.get("Limit")).toBe("20");
     expect(parsed.searchParams.get("StartIndex")).toBe("0");
     expect(parsed.searchParams.get("Fields")).toBe("SeriesName,SeriesId,ProductionYear,UserData");

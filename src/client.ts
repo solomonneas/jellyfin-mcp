@@ -22,7 +22,6 @@ import type {
   PlayCommand,
   UserItemData,
 } from "./types.js";
-import {VALID_ITEM_TYPES} from "./types.js";
 
 // 1 tick = 100 nanoseconds. Centralized so callers pass seconds and we convert
 // once at the boundary instead of leaking ticks into tool argument schemas.
@@ -336,24 +335,22 @@ export class JellyfinClient {
   // IsFavorite filter requires a user-scoped call (the global /Items endpoint
   // does not honor it), and there is no dedicated /Users/{userId}/Favorites
   // endpoint, so we piggyback on the Items collection endpoint with the
-  // IsFavorite filter. We exclude CollectionFolder to return only individual
-  // items (movies, series, episodes, music, etc.) - the common user expectation
-  // when asking "what are my favorites?".
+  // IsFavorite filter. IncludeItemTypes is optional and is only sent when the
+  // caller requests a narrower result set.
   async getFavoriteItems(
     userId: string,
     limit = 20,
     startIndex = 0,
     itemTypes?: string[],
   ): Promise<ItemsResponse> {
-    const defaultTypes = VALID_ITEM_TYPES.join(",");
     const params = new URLSearchParams({
       Recursive: "true",
       Filters: "IsFavorite",
-      IncludeItemTypes: itemTypes?.join(",") ?? defaultTypes,
       Limit: String(limit),
       StartIndex: String(startIndex),
       Fields: "SeriesName,SeriesId,ProductionYear,UserData",
     });
+    if (itemTypes?.length) params.set("IncludeItemTypes", itemTypes.join(","));
     return this.request<ItemsResponse>(
       `/Users/${encodeURIComponent(userId)}/Items?${params.toString()}`,
     );

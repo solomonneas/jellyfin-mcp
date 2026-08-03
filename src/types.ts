@@ -163,9 +163,8 @@ export type GeneralCommand =
   | "ToggleMute"
   | "DisplayMessage";
 
-// Item types that Jellyfin users commonly favorite. Shared between the
-// client's default IncludeItemTypes and the tool's Zod enum so they stay in
-// sync without duplicating the list.
+// Item types exposed by item-tool schemas for explicit filtering. Keep the
+// list centralized so their enums and descriptions stay in sync.
 export const VALID_ITEM_TYPES = [
   "Movie",
   "Series",
