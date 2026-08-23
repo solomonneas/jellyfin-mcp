@@ -48,10 +48,13 @@
   "dependencies": {
     "@effect/platform": "^0.96.2",
     "@lidless-labs/effect-operator-kit": "github:lidless-labs/effect-operator-kit#be710307beab748c860a3815d7578667cd95a907",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "effect": "^3.21.4",
-    "undici": "^7.28.0",
+    "undici": "^7.29.0",
     "zod": "^4.3.6"
+  },
+  "overrides": {
+    "@hono/node-server": "1.19.17"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
