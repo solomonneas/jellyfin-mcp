@@ -48,7 +48,7 @@ For MCP-compatible clients, `jellyctrl mcp` exposes the same project as a stdio 
 npm install -g jellyfin-mcp
 ```
 
-This installs both `jellyctrl` and the compatibility `jellyfin-mcp` MCP bin.
+This installs `jellyctrl`, the compatibility `jellyfin-mcp` stdio MCP bin, and the optional `jellyfin-mcp-http` loopback HTTP bin.
 
 Or from source:
 
@@ -89,6 +89,36 @@ For MCP clients, start the adapter with `jellyctrl mcp` or keep using the compat
 
 Then ask your agent: *"What's playing on Jellyfin right now?"* It will call `jellyfin_list_sessions` and report back.
 
+## Optional local HTTP transport
+
+The default MCP transport is stdio. Use `jellyfin-mcp-http` when an MCP client needs Streamable HTTP on the same machine, or through an authenticated proxy whose origin runs on that machine. The listener accepts MCP JSON-RPC only at `POST /mcp`, has a non-sensitive `GET /healthz` response, and binds to loopback only.
+
+Set a separate bearer token. Do not reuse `JELLYFIN_API_KEY` for this token.
+
+```bash
+export JELLYFIN_URL=http://192.0.2.10:8096
+export JELLYFIN_API_KEY=your-jellyfin-api-key
+export JELLYFIN_MCP_HTTP_TOKEN=replace-with-a-long-random-token
+jellyfin-mcp-http
+```
+
+The HTTP listener defaults to `127.0.0.1:3000`. Its configuration is intentionally strict:
+
+- `JELLYFIN_MCP_HTTP_HOST` is `127.0.0.1` by default and may only be `127.0.0.1` or `::1`.
+- `JELLYFIN_MCP_HTTP_PORT` is `3000` by default and must be an integer from 1 to 65535.
+- `JELLYFIN_MCP_HTTP_TOKEN` is required. Send it as `Authorization: Bearer <token>`.
+- `JELLYFIN_MCP_REMOTE_MODE` defaults to `observe`. It is fixed at process startup and cannot be changed by an MCP request.
+
+Remote modes provide a second server-side control in addition to each tool's existing `confirm: true` requirement:
+
+- `observe` permits only read tools.
+- `managed` also permits routine media, library, session, and user-data writes.
+- `full` permits every registered tool. High-impact tools still require their existing `confirm: true` argument.
+
+In `managed` mode, the server denies restart, shutdown, account creation or deletion, password changes, account enable or disable, scheduled-task execution, session stop or stop-all, destructive playlist or collection removal, bulk resume clearing, and Quick Connect authorization. Unknown or unclassified tools are denied in every mode.
+
+Do not expose this listener directly or change it to a non-loopback bind. For remote clients, keep the loopback origin and put an identity-aware proxy or tunnel in front of it. Keep the HTTP token as a second authentication layer, independent from the Jellyfin API key, and rotate it if a client or its logs may have exposed it.
+
 ## Tools
 
 ### System
@@ -104,7 +134,7 @@ Then ask your agent: *"What's playing on Jellyfin right now?"* It will call `jel
 - `jellyfin_list_users` - with admin / disabled flags and last login timestamps
 - `jellyfin_create_user`
 - `jellyfin_delete_user` *(requires `confirm: true`)*
-- `jellyfin_set_user_disabled`
+- `jellyfin_set_user_disabled` *(requires `confirm: true`)*
 - `jellyfin_set_user_password` *(requires `confirm: true`)*
 
 > **Warning:** `jellyfin_set_user_password` takes the new password as plaintext tool input. That means the password transits your LLM conversation, the model provider's request logs, and any saved session transcript. Treat any password set this way as exposed: use a throwaway value and have the user change it in the Jellyfin UI, or set passwords in the Jellyfin dashboard instead.
@@ -113,7 +143,7 @@ Then ask your agent: *"What's playing on Jellyfin right now?"* It will call `jel
 - `jellyfin_list_sessions` - active/idle clients with now-playing, progress, paused state
 - `jellyfin_pause_session`
 - `jellyfin_resume_session`
-- `jellyfin_stop_session`
+- `jellyfin_stop_session` *(requires `confirm: true`)*
 - `jellyfin_send_message_to_session` - toast/dialog on the client
 - `jellyfin_seek_session` - jump to a position in seconds
 - `jellyfin_next_track` / `jellyfin_previous_track`
@@ -140,12 +170,12 @@ Then ask your agent: *"What's playing on Jellyfin right now?"* It will call `jel
 - `jellyfin_create_playlist`
 - `jellyfin_get_playlist_items` - returns `playlistEntryId` (use this for removal, not the raw item ID)
 - `jellyfin_add_to_playlist`
-- `jellyfin_remove_from_playlist`
+- `jellyfin_remove_from_playlist` *(requires `confirm: true`)*
 
 ### Collections
 - `jellyfin_create_collection`
 - `jellyfin_add_to_collection`
-- `jellyfin_remove_from_collection`
+- `jellyfin_remove_from_collection` *(requires `confirm: true`)*
 
 ### Items
 - `jellyfin_search_items` - by name, optional type filter

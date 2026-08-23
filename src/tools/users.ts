@@ -69,14 +69,19 @@ export function registerUserTools(server: McpServer, client: JellyfinClient): vo
 
   server.tool(
     "jellyfin_set_user_disabled",
-    "Enable or disable a Jellyfin user account. Disabled users can't log in but their data is preserved.",
+    "Enable or disable a Jellyfin user account. Disabled users can't log in but their data is preserved. Requires confirm: true.",
     {
       userId: z.string().describe("User ID from jellyfin_list_users"),
       disabled: z.boolean().describe("true to disable, false to re-enable"),
+      confirm: z
+        .boolean()
+        .optional()
+        .describe("Must be true to proceed with disabling/enabling the user."),
     },
     DESTRUCTIVE,
-    toToolHandler(({ userId, disabled }) =>
+    toToolHandler(({ userId, disabled, confirm }) =>
       toolResult(Effect.gen(function* () {
+        if (!confirm) return refuseUnconfirmed(`${disabled ? "disable" : "enable"} user ${userId}`);
         yield* fromPromise(() => client.setUserDisabled(userId, disabled));
         return ok({
           result: `user ${userId} ${disabled ? "disabled" : "enabled"}`,

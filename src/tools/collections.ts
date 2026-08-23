@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import type { JellyfinClient } from "../client.js";
 import { fromPromise, toolResult, toToolHandler } from "../effect/tool-adapter.js";
-import { ok, DESTRUCTIVE, NON_DESTRUCTIVE } from "./_util.js";
+import { ok, refuseUnconfirmed, DESTRUCTIVE, NON_DESTRUCTIVE } from "./_util.js";
 
 export function registerCollectionTools(server: McpServer, client: JellyfinClient): void {
   server.tool(
@@ -44,14 +44,21 @@ export function registerCollectionTools(server: McpServer, client: JellyfinClien
 
   server.tool(
     "jellyfin_remove_from_collection",
-    "Remove items from a collection.",
+    "Remove items from a collection. Requires confirm: true.",
     {
       collectionId: z.string().describe("Collection ID"),
       itemIds: z.array(z.string().min(1)).min(1).describe("Item IDs to remove"),
+      confirm: z
+        .boolean()
+        .optional()
+        .describe("Must be true to proceed with removing items from the collection."),
     },
     DESTRUCTIVE,
-    toToolHandler(({ collectionId, itemIds }) =>
+    toToolHandler(({ collectionId, itemIds, confirm }) =>
       toolResult(Effect.gen(function* () {
+        if (!confirm) {
+          return refuseUnconfirmed(`remove items from collection ${collectionId}`);
+        }
         yield* fromPromise(() => client.removeFromCollection(collectionId, itemIds));
         return ok({
           result: `removed ${itemIds.length} item(s) from collection ${collectionId}`,

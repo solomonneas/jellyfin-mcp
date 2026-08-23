@@ -33,59 +33,118 @@ function parseResult(result: { content: { text: string }[] }): Record<string, un
   return JSON.parse(result.content[0].text) as Record<string, unknown>;
 }
 
-describe("frozen no-confirm tool contracts", () => {
-  it("set user disabled executes without confirm", async () => {
-    const client = {
-      setUserDisabled: vi.fn().mockResolvedValue(undefined),
-    } as unknown as JellyfinClient;
-    const { server, tools } = makeFakeServer();
-    registerUserTools(server as never, client);
+describe("destructive tool confirmation gates", () => {
+  describe("jellyfin_set_user_disabled", () => {
+    it("refuses without confirm", async () => {
+      const client = {
+        setUserDisabled: vi.fn().mockResolvedValue(undefined),
+      } as unknown as JellyfinClient;
+      const { server, tools } = makeFakeServer();
+      registerUserTools(server as never, client);
 
-    const tool = tools.get("jellyfin_set_user_disabled");
-    const result = await tool!.handler({ userId: "u1", disabled: true });
+      const tool = tools.get("jellyfin_set_user_disabled");
+      const result = await tool!.handler({ userId: "u1", disabled: true });
 
-    expect(result.isError).toBeUndefined();
-    expect(client.setUserDisabled).toHaveBeenCalledWith("u1", true);
-    expect(parseResult(result)).toEqual({ result: "user u1 disabled" });
-  });
-
-  it("remove from playlist executes without confirm", async () => {
-    const client = {
-      removeFromPlaylist: vi.fn().mockResolvedValue(undefined),
-    } as unknown as JellyfinClient;
-    const { server, tools } = makeFakeServer();
-    registerPlaylistTools(server as never, client);
-
-    const tool = tools.get("jellyfin_remove_from_playlist");
-    const result = await tool!.handler({
-      playlistId: "pl1",
-      entryIds: ["entry1", "entry2"],
+      expect(result.isError).toBe(true);
+      expect(client.setUserDisabled).not.toHaveBeenCalled();
+      expect(parseResult(result)).toMatchObject({ error: expect.stringContaining("confirm") });
     });
 
-    expect(result.isError).toBeUndefined();
-    expect(client.removeFromPlaylist).toHaveBeenCalledWith("pl1", ["entry1", "entry2"]);
-    expect(parseResult(result)).toEqual({
-      result: "removed 2 entry/entries from playlist pl1",
+    it("executes with confirm true", async () => {
+      const client = {
+        setUserDisabled: vi.fn().mockResolvedValue(undefined),
+      } as unknown as JellyfinClient;
+      const { server, tools } = makeFakeServer();
+      registerUserTools(server as never, client);
+
+      const tool = tools.get("jellyfin_set_user_disabled");
+      const result = await tool!.handler({ userId: "u1", disabled: true, confirm: true });
+
+      expect(result.isError).toBeUndefined();
+      expect(client.setUserDisabled).toHaveBeenCalledWith("u1", true);
+      expect(parseResult(result)).toEqual({ result: "user u1 disabled" });
     });
   });
 
-  it("remove from collection executes without confirm", async () => {
-    const client = {
-      removeFromCollection: vi.fn().mockResolvedValue(undefined),
-    } as unknown as JellyfinClient;
-    const { server, tools } = makeFakeServer();
-    registerCollectionTools(server as never, client);
+  describe("jellyfin_remove_from_playlist", () => {
+    it("refuses without confirm", async () => {
+      const client = {
+        removeFromPlaylist: vi.fn().mockResolvedValue(undefined),
+      } as unknown as JellyfinClient;
+      const { server, tools } = makeFakeServer();
+      registerPlaylistTools(server as never, client);
 
-    const tool = tools.get("jellyfin_remove_from_collection");
-    const result = await tool!.handler({
-      collectionId: "col1",
-      itemIds: ["i1", "i2"],
+      const tool = tools.get("jellyfin_remove_from_playlist");
+      const result = await tool!.handler({
+        playlistId: "pl1",
+        entryIds: ["entry1", "entry2"],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(client.removeFromPlaylist).not.toHaveBeenCalled();
+      expect(parseResult(result)).toMatchObject({ error: expect.stringContaining("confirm") });
     });
 
-    expect(result.isError).toBeUndefined();
-    expect(client.removeFromCollection).toHaveBeenCalledWith("col1", ["i1", "i2"]);
-    expect(parseResult(result)).toEqual({
-      result: "removed 2 item(s) from collection col1",
+    it("executes with confirm true", async () => {
+      const client = {
+        removeFromPlaylist: vi.fn().mockResolvedValue(undefined),
+      } as unknown as JellyfinClient;
+      const { server, tools } = makeFakeServer();
+      registerPlaylistTools(server as never, client);
+
+      const tool = tools.get("jellyfin_remove_from_playlist");
+      const result = await tool!.handler({
+        playlistId: "pl1",
+        entryIds: ["entry1", "entry2"],
+        confirm: true,
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(client.removeFromPlaylist).toHaveBeenCalledWith("pl1", ["entry1", "entry2"]);
+      expect(parseResult(result)).toEqual({
+        result: "removed 2 entry/entries from playlist pl1",
+      });
+    });
+  });
+
+  describe("jellyfin_remove_from_collection", () => {
+    it("refuses without confirm", async () => {
+      const client = {
+        removeFromCollection: vi.fn().mockResolvedValue(undefined),
+      } as unknown as JellyfinClient;
+      const { server, tools } = makeFakeServer();
+      registerCollectionTools(server as never, client);
+
+      const tool = tools.get("jellyfin_remove_from_collection");
+      const result = await tool!.handler({
+        collectionId: "col1",
+        itemIds: ["i1", "i2"],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(client.removeFromCollection).not.toHaveBeenCalled();
+      expect(parseResult(result)).toMatchObject({ error: expect.stringContaining("confirm") });
+    });
+
+    it("executes with confirm true", async () => {
+      const client = {
+        removeFromCollection: vi.fn().mockResolvedValue(undefined),
+      } as unknown as JellyfinClient;
+      const { server, tools } = makeFakeServer();
+      registerCollectionTools(server as never, client);
+
+      const tool = tools.get("jellyfin_remove_from_collection");
+      const result = await tool!.handler({
+        collectionId: "col1",
+        itemIds: ["i1", "i2"],
+        confirm: true,
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(client.removeFromCollection).toHaveBeenCalledWith("col1", ["i1", "i2"]);
+      expect(parseResult(result)).toEqual({
+        result: "removed 2 item(s) from collection col1",
+      });
     });
   });
 });
