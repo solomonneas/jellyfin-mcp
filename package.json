@@ -6,12 +6,14 @@
   "main": "dist/index.js",
   "bin": {
     "jellyfin-mcp": "dist/mcp-bin.js",
+    "jellyfin-mcp-http": "dist/http-bin.js",
     "jellyctrl": "dist/cli.js",
     "jellyctl": "dist/cli.js"
   },
   "scripts": {
     "build": "tsup && tsc -p tsconfig.build.json",
     "dev": "tsx watch src/index.ts",
+    "start:http": "node dist/http-bin.js",
     "start": "node dist/cli.js mcp",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -13,6 +13,15 @@ export interface JellyfinConfig {
   timeout: number;
 }
 
+export type RemoteMode = "observe" | "managed" | "full";
+
+export interface HttpConfig {
+  host: "127.0.0.1" | "::1";
+  port: number;
+  token: string;
+  remoteMode: RemoteMode;
+}
+
 const requireUrlMessage =
   "JELLYFIN_URL environment variable is required (e.g. http://localhost:8096)";
 const requireApiKeyMessage =
@@ -49,4 +58,26 @@ export function getConfig(): JellyfinConfig {
   }
 
   return result.right;
+}
+
+export function getHttpConfig(): HttpConfig {
+  const host = process.env.JELLYFIN_MCP_HTTP_HOST ?? "127.0.0.1";
+  if (host !== "127.0.0.1" && host !== "::1") {
+    throw new Error("JELLYFIN_MCP_HTTP_HOST must be 127.0.0.1 or ::1");
+  }
+  const rawPort = process.env.JELLYFIN_MCP_HTTP_PORT ?? "3000";
+  if (!/^[1-9]\d{0,4}$/.test(rawPort)) {
+    throw new Error("JELLYFIN_MCP_HTTP_PORT must be an integer from 1 to 65535");
+  }
+  const port = Number(rawPort);
+  if (port > 65535) throw new Error("JELLYFIN_MCP_HTTP_PORT must be an integer from 1 to 65535");
+  const token = process.env.JELLYFIN_MCP_HTTP_TOKEN;
+  if (typeof token !== "string" || token.trim().length === 0) {
+    throw new Error("JELLYFIN_MCP_HTTP_TOKEN environment variable is required");
+  }
+  const remoteMode = process.env.JELLYFIN_MCP_REMOTE_MODE ?? "observe";
+  if (remoteMode !== "observe" && remoteMode !== "managed" && remoteMode !== "full") {
+    throw new Error("JELLYFIN_MCP_REMOTE_MODE must be observe, managed, or full");
+  }
+  return { host, port, token, remoteMode };
 }

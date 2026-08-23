@@ -1,29 +1,9 @@
-import { createRequire } from "node:module";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Effect } from "effect";
 import { getConfig } from "./config.js";
-import { JellyfinClient } from "./client.js";
-import { registerSystemTools } from "./tools/system.js";
-import { registerLibraryTools } from "./tools/libraries.js";
-import { registerUserTools } from "./tools/users.js";
-import { registerSessionTools } from "./tools/sessions.js";
-import { registerItemTools } from "./tools/items.js";
-import { registerTaskTools } from "./tools/tasks.js";
-import { registerUserDataTools } from "./tools/userdata.js";
-import { registerPlaylistTools } from "./tools/playlists.js";
-import { registerCollectionTools } from "./tools/collections.js";
-import { registerDiscoveryTools } from "./tools/discovery.js";
-import { registerQuickConnectTools } from "./tools/quickconnect.js";
-
-// Single source of truth for the server name and version. Resolved at runtime
-// relative to this file: both src/index.ts (dev via tsx) and dist/index.js
-// (build, npm package) sit one level below the package root, and npm always
-// ships package.json, so "../package.json" resolves in every mode.
-const nodeRequire = createRequire(import.meta.url);
-const pkg = nodeRequire("../package.json") as { name: string; version: string };
+import { createMcpServer } from "./server.js";
 
 // Build and connect the MCP server over stdio. Exported so the CLI (`jellyctrl
 // mcp`) and the dedicated server bin (mcp-bin.ts) share one identical startup
@@ -42,26 +22,7 @@ const startServerEffect = (): Effect.Effect<void> =>
     // would disable certificate validation for every outbound TLS connection in
     // the process.
 
-    const server = new McpServer({
-      name: pkg.name,
-      version: pkg.version,
-      description:
-        "MCP server for Jellyfin: control playback sessions (pause/resume/seek/volume/cast), manage users and libraries, mark watched/favorite, manage Continue Watching and resume state, manage playlists and collections, run scheduled tasks, query content, discover resume/next-up/similar items, authorize Quick Connect codes, and inspect activity logs.",
-    });
-
-    const client = new JellyfinClient(config);
-
-    registerSystemTools(server, client);
-    registerLibraryTools(server, client);
-    registerUserTools(server, client);
-    registerSessionTools(server, client);
-    registerItemTools(server, client);
-    registerTaskTools(server, client);
-    registerUserDataTools(server, client);
-    registerPlaylistTools(server, client);
-    registerCollectionTools(server, client);
-    registerDiscoveryTools(server, client);
-    registerQuickConnectTools(server, client);
+    const server = createMcpServer(config);
 
     const transport = new StdioServerTransport();
     // Strip the draft-07 `$schema` the MCP SDK stamps on tool schemas; Anthropic

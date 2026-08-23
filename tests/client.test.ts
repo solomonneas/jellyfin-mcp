@@ -82,6 +82,22 @@ describe("JellyfinClient", () => {
     expect(process.env.NODE_TLS_REJECT_UNAUTHORIZED).not.toBe("0");
   });
 
+  it("closes its private TLS-skip dispatcher only once", async () => {
+    const insecure = new JellyfinClient({
+      url: "https://jellyfin.test",
+      apiKey: "test-key",
+      verifySsl: false,
+      timeout: 5000,
+    });
+    const close = vi.fn(async () => {});
+    (insecure as unknown as { dispatcher?: { close: () => Promise<void> } }).dispatcher = { close };
+
+    await insecure.close();
+    await insecure.close();
+
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("passes no dispatcher when TLS verification is enabled (secure default)", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ ServerName: "Test" }), { status: 200 }),

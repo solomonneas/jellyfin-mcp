@@ -50,6 +50,12 @@ export class JellyfinClient {
     }
   }
 
+  async close(): Promise<void> {
+    const dispatcher = this.dispatcher;
+    this.dispatcher = undefined;
+    if (dispatcher) await dispatcher.close();
+  }
+
   private async request<T>(
     path: string,
     options: RequestInit = {},
